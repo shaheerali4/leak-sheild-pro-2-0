@@ -951,6 +951,8 @@ function FindingCard({ finding }) {
     dns_record: "DNS record",
     public_url: "Public URL",
     response_body: "Response body",
+    project_file: "Project file",
+    pasted_text: "Pasted text",
     configuration: "Configuration"
   };
   const locationLabel = locationLabels[finding.location_type] || (hasSourceCoordinates ? "Source code" : "Remote configuration");
@@ -1012,6 +1014,10 @@ function FindingCard({ finding }) {
               <dd>{finding.detection_method}</dd>
             </div>
           )}
+          <div>
+            <dt>Finding fingerprint</dt>
+            <dd><code>SHA-256 {finding.value_hash}</code></dd>
+          </div>
           {hasSourceCoordinates && finding.context_snippet && (
             <div>
               <dt>Redacted source context</dt>

@@ -463,23 +463,24 @@ def _finding(
     score = SEVERITY_SCORE[severity]
     owasp, cwe, capec = mapping_for(category)
     impact = summary
+    evidence = observed_evidence or summary
     return {
         "rule_id": rule_id,
         "secret_type": title,
         "severity": severity,
         "risk_score": score,
         "risk_level": severity,
-        "value_hash": hashlib.sha256(f"{rule_id}:{address}".encode()).hexdigest(),
+        "value_hash": hashlib.sha256(f"{rule_id}:{address}:{evidence}".encode()).hexdigest(),
         "value_preview": "Verified configuration evidence",
         "line_number": 0,
         "column_start": 0,
         "column_end": 0,
-        "context_snippet": observed_evidence or summary,
+        "context_snippet": evidence,
         "source_address": address,
         "public_accessible": True,
         "location_type": location_type,
         "affected_component": affected_component or title,
-        "observed_evidence": observed_evidence or summary,
+        "observed_evidence": evidence,
         "expected_value": expected_value or header_value or remediation,
         "detection_method": detection_method or "Passive inspection of the publicly accessible service response.",
         "confidence": 0.95,

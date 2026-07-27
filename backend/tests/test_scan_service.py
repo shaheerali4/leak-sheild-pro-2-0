@@ -72,3 +72,20 @@ def test_website_evidence_metadata_survives_persistence_mapping() -> None:
     assert response.observed_evidence == "The header was absent from the HTTP 200 response."
     assert response.expected_value == "Content-Security-Policy: default-src 'self'"
     assert response.detection_method == "Inspected the public homepage response headers."
+
+
+def test_project_hash_binds_finding_locations_to_file_paths() -> None:
+    first = ScanRequest(
+        mode="project-folder",
+        files=[{"path": "config/first.env", "content": "password='SameProductionPassword2026!'"}],
+    )
+    second = ScanRequest(
+        mode="project-folder",
+        files=[{"path": "config/second.env", "content": "password='SameProductionPassword2026!'"}],
+    )
+
+    first_content, _ = ScanService._scan_content(first)
+    second_content, _ = ScanService._scan_content(second)
+
+    assert first_content == second_content
+    assert ScanService._content_hash(first, first_content) != ScanService._content_hash(second, second_content)

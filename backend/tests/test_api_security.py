@@ -22,6 +22,7 @@ def test_scan_history_is_isolated_between_browser_sessions() -> None:
         )
         assert created.status_code == 201
         scan_id = created.json()["id"]
+        finding = created.json()["findings"][0]
 
         own_history = client.get("/api/scans", headers={"X-LeakShield-Session": SESSION_A})
         other_history = client.get("/api/scans", headers={"X-LeakShield-Session": SESSION_B})
@@ -30,6 +31,43 @@ def test_scan_history_is_isolated_between_browser_sessions() -> None:
     assert any(item["id"] == scan_id for item in own_history.json())
     assert all(item["id"] != scan_id for item in other_history.json())
     assert other_detail.status_code == 404
+    assert finding["file_path"] == "ownership-test.env"
+    assert finding["location_type"] == "pasted_text"
+    assert finding["line_number"] == 1
+    assert finding["column_start"] == 1
+    assert finding["affected_component"] == "Pasted input: ownership-test.env"
+    assert "Redacted preview" in finding["observed_evidence"]
+    assert finding["value_preview"] not in finding["context_snippet"]
+
+
+def test_project_scan_reports_file_relative_location_and_evidence() -> None:
+    _rate_requests.clear()
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/scans",
+            headers={"X-LeakShield-Session": SESSION_B},
+            json={
+                "mode": "project-folder",
+                "source_name": "uploaded-project",
+                "files": [
+                    {"path": "src/safe.js", "content": "const ready = true;\nconst port = 443;"},
+                    {
+                        "path": "config/production.env",
+                        "content": "APP_ENV=production\npassword='SecondFileProductionPassword2026!'",
+                    },
+                ],
+            },
+        )
+
+    assert response.status_code == 201
+    finding = response.json()["findings"][0]
+    assert finding["file_path"] == "config/production.env"
+    assert finding["location_type"] == "project_file"
+    assert finding["line_number"] == 2
+    assert finding["column_start"] == 1
+    assert finding["affected_component"] == "Project file: config/production.env"
+    assert "line 2" in finding["observed_evidence"]
+    assert finding["value_preview"] not in finding["context_snippet"]
 
 
 def test_scan_requires_a_canonical_session_identifier() -> None:

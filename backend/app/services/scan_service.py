@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import json
 from datetime import datetime, timezone
 from typing import Any
 
@@ -42,7 +43,7 @@ class ScanService:
         if len(content.encode("utf-8")) > self.settings.max_scan_bytes * 5:
             raise HTTPException(status_code=413, detail="Scan payload exceeds configured size limit")
 
-        content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        content_hash = self._content_hash(payload, content)
         metadata_hash = hashlib.sha256(str(sorted(payload.metadata.items())).encode("utf-8")).hexdigest()
         cache_key = f"scan:{self.owner_id}:{payload.mode}:{content_hash}:{metadata_hash}:{payload.source_name}"
         cached = await cache_client.get_json(cache_key)
@@ -63,12 +64,40 @@ class ScanService:
         self.session.add(scan)
 
         for detection in detections:
-            risk = self.risk_engine.score_finding(detection, content, payload.metadata)
+            source_location = self._source_location_for_line(detection.line_number, file_ranges)
+            project_path, source_line = source_location or (None, detection.line_number)
+            display_path = project_path or payload.source_name
+            location_type = "project_file" if project_path else "pasted_text"
+            risk_metadata = {
+                **payload.metadata,
+                "scan_mode": payload.mode,
+                "source_path": display_path,
+            }
+            risk = self.risk_engine.score_finding(detection, content, risk_metadata)
             risk_results.append(risk)
             explanation = self.explainer.explain(detection, risk)
-            file_path = self._file_for_line(detection.line_number, file_ranges)
-            if file_path:
-                explanation["_finding"] = {"file_path": file_path}
+            explanation["_finding"] = {
+                "file_path": display_path,
+                "location_type": location_type,
+                "affected_component": (
+                    f"Project file: {display_path}"
+                    if project_path
+                    else f"Pasted input: {display_path}"
+                ),
+                "observed_evidence": (
+                    f"{detection.rule.secret_type} signature matched at line {source_line}, "
+                    f"columns {detection.column_start}-{detection.column_end}. "
+                    f"Redacted preview: {detection.value_preview}."
+                ),
+                "expected_value": (
+                    "No credential, token, private key, password, or connection secret should be "
+                    "stored in submitted source content."
+                ),
+                "detection_method": (
+                    "Scanned the submitted text with LeakShield credential signatures, mapped the "
+                    "match to its original source, and redacted the matched value."
+                ),
+            }
             model = Finding(
                 scan=scan,
                 rule_id=detection.rule.rule_id,
@@ -78,7 +107,7 @@ class ScanService:
                 risk_level=risk.level,
                 value_hash=detection.value_hash,
                 value_preview=detection.value_preview,
-                line_number=detection.line_number,
+                line_number=source_line,
                 column_start=detection.column_start,
                 column_end=detection.column_end,
                 context_snippet=detection.context_snippet,
@@ -104,21 +133,41 @@ class ScanService:
     def _scan_content(payload: ScanRequest) -> tuple[str, list[tuple[int, int, str]]]:
         if payload.mode != "project-folder":
             return payload.content, []
-        chunks = []
-        ranges = []
+        chunks: list[str] = []
+        ranges: list[tuple[int, int, str]] = []
         current_line = 1
         for file in payload.files:
-            marker = f"// FILE: {file.path}\n"
-            chunk = f"{marker}{file.content}\n"
-            line_count = chunk.count("\n") + 1
-            ranges.append((current_line, current_line + line_count, file.path))
-            chunks.append(chunk)
-            current_line += line_count
+            line_count = file.content.count("\n") + 1
+            end_line = current_line + line_count - 1
+            ranges.append((current_line, end_line, file.path))
+            chunks.append(file.content)
+            current_line = end_line + 1
         return "\n".join(chunks), ranges
 
     @staticmethod
-    def _file_for_line(line: int, ranges: list[tuple[int, int, str]]) -> str | None:
-        return next((path for start, end, path in ranges if start <= line <= end), None)
+    def _content_hash(payload: ScanRequest, content: str) -> str:
+        if payload.mode != "project-folder":
+            return hashlib.sha256(content.encode("utf-8")).hexdigest()
+        canonical_project = [
+            {"path": file.path, "content": file.content}
+            for file in payload.files
+        ]
+        serialized = json.dumps(
+            canonical_project,
+            ensure_ascii=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _source_location_for_line(
+        line: int,
+        ranges: list[tuple[int, int, str]],
+    ) -> tuple[str, int] | None:
+        return next(
+            ((path, line - start + 1) for start, end, path in ranges if start <= line <= end),
+            None,
+        )
 
     async def _persist_assessment(self, payload: ScanRequest, result: dict[str, Any]) -> ScanResponse:
         previous_result = await self.session.execute(
