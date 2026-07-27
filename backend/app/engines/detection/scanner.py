@@ -1,12 +1,41 @@
 from bisect import bisect_right
+from collections import Counter
 from dataclasses import dataclass
 import hashlib
 from html import escape
+import math
 
 from app.engines.detection.rules import SECRET_RULES, SecretRule
 
 
 MAX_FINDINGS_PER_SCAN = 250
+EXAMPLE_MARKERS = (
+    "example",
+    "sample",
+    "dummy",
+    "changeme",
+    "placeholder",
+    "your_",
+    "xxxxx",
+    "test_test",
+    "<",
+    ">",
+)
+STRUCTURAL_RULE_IDS = frozenset(
+    {
+        "aws-access-key-id",
+        "google-api-key",
+        "jwt-token",
+        "private-key-block",
+        "database-url",
+        "basic-auth-url",
+        "github-token",
+        "stripe-secret-key",
+        "password-assignment",
+    }
+)
+MIN_SECRET_ENTROPY = 3.15
+MIN_SECRET_LENGTH = 20
 
 
 @dataclass(frozen=True)
@@ -36,6 +65,8 @@ class DetectionEngine:
                 value = self._extract_secret_value(match)
                 normalized = value.strip()
                 if self._looks_like_example(normalized):
+                    continue
+                if not self._is_likely_secret(normalized, rule.rule_id):
                     continue
                 key = (rule.rule_id, hashlib.sha256(normalized.encode()).hexdigest(), match.start())
                 if key in seen:
@@ -91,6 +122,32 @@ class DetectionEngine:
     @staticmethod
     def _looks_like_example(value: str) -> bool:
         lowered = value.lower()
-        examples = ("example", "sample", "dummy", "changeme", "placeholder", "your_", "xxxxx")
-        return any(marker in lowered for marker in examples)
+        return any(marker in lowered for marker in EXAMPLE_MARKERS)
+
+    @staticmethod
+    def _entropy(value: str) -> float:
+        if not value:
+            return 0.0
+        counts = Counter(value)
+        length = len(value)
+        return -sum((count / length) * math.log2(count / length) for count in counts.values())
+
+    @classmethod
+    def _is_likely_secret(cls, value: str, rule_id: str) -> bool:
+        normalized = value.strip()
+        if not normalized:
+            return False
+        if rule_id in STRUCTURAL_RULE_IDS:
+            return True
+        if len(normalized) < MIN_SECRET_LENGTH:
+            return False
+        if normalized.lower() in {"true", "false", "null", "undefined", "localhost", "127.0.0.1"}:
+            return False
+        if normalized.replace("-", "").isalpha() and len(normalized) < 28:
+            return False
+        return (
+            cls._entropy(normalized) >= MIN_SECRET_ENTROPY
+            or any(character.isdigit() for character in normalized)
+            or any(character in "._~+/=-" for character in normalized)
+        )
 
