@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from app.engines.assessment.website import (
     _assert_public_url,
     _clean_url,
+    _fetch,
     _finding,
     _grade,
     _header_assessment,
@@ -64,12 +65,61 @@ def test_url_credentials_and_query_values_are_not_retained() -> None:
     assert _clean_url("https://user:secret@example.com/path?token=private#section") == "https://example.com/path"
 
 
+def test_bare_domain_defaults_to_https() -> None:
+    assert _clean_url("example.com/path") == "https://example.com/path"
+
+
 def test_validated_hostname_is_pinned_to_its_public_address() -> None:
     request_url, headers, extensions = _pinned_request("https://example.com:8443/path", "93.184.216.34")
 
     assert request_url == "https://93.184.216.34:8443/path"
     assert headers == {"Host": "example.com:8443"}
     assert extensions == {"sni_hostname": "example.com"}
+
+
+def test_public_fetch_tries_another_validated_address(monkeypatch) -> None:
+    async def resolved(_url: str) -> tuple[str, tuple[str, ...]]:
+        return "https://example.com/", ("93.184.216.1", "93.184.216.34")
+
+    attempts: list[str] = []
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        attempts.append(request.url.host)
+        if request.url.host == "93.184.216.1":
+            raise httpx.ConnectError("address unavailable", request=request)
+        return httpx.Response(200, headers={"content-type": "text/html"}, text="<h1>Ready</h1>")
+
+    monkeypatch.setattr("app.engines.assessment.website._resolve_public_target", resolved)
+
+    async def run() -> dict:
+        preferred: dict[str, str] = {}
+        async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+            result = await _fetch(client, "https://example.com", preferred_addresses=preferred)
+            await _fetch(client, "https://example.com/second", preferred_addresses=preferred)
+            return result
+
+    result = asyncio.run(run())
+    assert attempts == ["93.184.216.1", "93.184.216.34", "93.184.216.34"]
+    assert result["status"] == 200
+    assert result["url"] == "https://example.com/"
+
+
+def test_public_fetch_explains_connection_failure(monkeypatch) -> None:
+    async def resolved(_url: str) -> tuple[str, tuple[str, ...]]:
+        return "https://example.com/", ("93.184.216.1",)
+
+    def reject(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("address unavailable", request=request)
+
+    monkeypatch.setattr("app.engines.assessment.website._resolve_public_target", resolved)
+
+    async def run() -> dict:
+        async with httpx.AsyncClient(transport=httpx.MockTransport(reject)) as client:
+            return await _fetch(client, "https://example.com")
+
+    with pytest.raises(HTTPException, match="HTTP/TLS connection") as error:
+        asyncio.run(run())
+    assert error.value.status_code == 502
 
 
 def test_invalid_ports_are_rejected_as_validation_errors() -> None:

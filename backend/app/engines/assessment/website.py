@@ -25,6 +25,7 @@ from app.engines.risk import RiskEngine
 MAX_RESPONSE_BYTES = 600_000
 MAX_PAGES = 20
 MAX_JAVASCRIPT_FILES = 8
+MAX_TARGET_ADDRESSES = 4
 COMMON_PATHS = (
     "/robots.txt",
     "/sitemap.xml",
@@ -78,7 +79,10 @@ class LinkCollector(HTMLParser):
 
 
 def _clean_url(value: str) -> str:
-    parsed = urlparse(value.strip())
+    cleaned = value.strip()
+    if "://" not in cleaned:
+        cleaned = f"https://{cleaned}"
+    parsed = urlparse(cleaned)
     scheme = parsed.scheme.lower()
     if scheme not in {"http", "https"} or not parsed.hostname:
         raise HTTPException(status_code=400, detail="A public http or https website URL is required")
@@ -100,7 +104,7 @@ def _is_global_address(value: str) -> bool:
         return False
 
 
-async def _resolve_public_target(value: str) -> tuple[str, str]:
+async def _resolve_public_target(value: str) -> tuple[str, tuple[str, ...]]:
     safe_url = _clean_url(value)
     hostname = urlparse(safe_url).hostname or ""
     if hostname in {"localhost", "localhost.localdomain"} or hostname.endswith((".local", ".internal")):
@@ -112,11 +116,12 @@ async def _resolve_public_target(value: str) -> tuple[str, str]:
     ips = {item[4][0].split("%")[0] for item in addresses}
     if not ips or any(not _is_global_address(address) for address in ips):
         raise HTTPException(status_code=400, detail="Private, reserved, and loopback targets are not allowed")
-    return safe_url, sorted(ips)[0]
+    ordered = sorted(ips, key=lambda address: (ipaddress.ip_address(address).version, address))
+    return safe_url, tuple(ordered[:MAX_TARGET_ADDRESSES])
 
 
 async def _assert_public_url(value: str) -> str:
-    safe_url, _address = await _resolve_public_target(value)
+    safe_url, _addresses = await _resolve_public_target(value)
     return safe_url
 
 
@@ -146,36 +151,75 @@ def _absolute(base: str, candidate: str) -> str | None:
         return None
 
 
-async def _fetch(client: httpx.AsyncClient, url: str, redirects: int = 0) -> dict[str, Any]:
-    safe_url, address = await _resolve_public_target(url)
-    request_url, headers, extensions = _pinned_request(safe_url, address)
-    try:
-        async with client.stream("GET", request_url, headers=headers, extensions=extensions) as response:
-            _assert_public_peer(response)
-            if response.status_code in {301, 302, 303, 307, 308} and response.headers.get("location"):
-                if redirects >= 3:
-                    raise HTTPException(status_code=400, detail="The target redirected too many times")
-                return await _fetch(client, urljoin(safe_url, response.headers["location"]), redirects + 1)
-            chunks = bytearray()
-            async for chunk in response.aiter_bytes():
-                chunks.extend(chunk)
-                if len(chunks) > MAX_RESPONSE_BYTES:
-                    break
-            content_type = response.headers.get("content-type", "").lower()
-            textual = any(item in content_type for item in ("text", "json", "javascript", "xml")) or not content_type
-            text = bytes(chunks[:MAX_RESPONSE_BYTES]).decode(response.encoding or "utf-8", errors="replace") if textual else ""
-            return {
-                "url": safe_url,
-                "status": response.status_code,
-                "headers": dict(response.headers),
-                "content_type": content_type,
-                "text": text,
-                "truncated": len(chunks) > MAX_RESPONSE_BYTES,
-            }
-    except httpx.TimeoutException as error:
-        raise HTTPException(status_code=504, detail=f"Timed out while requesting {urlparse(safe_url).path or '/'}") from error
-    except httpx.HTTPError as error:
-        raise HTTPException(status_code=502, detail="The public target could not be fetched") from error
+async def _fetch(
+    client: httpx.AsyncClient,
+    url: str,
+    redirects: int = 0,
+    preferred_addresses: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    safe_url, addresses = await _resolve_public_target(url)
+    hostname = urlparse(safe_url).hostname or "target"
+    preferred = preferred_addresses.get(hostname) if preferred_addresses is not None else None
+    if preferred in addresses:
+        addresses = (preferred, *(address for address in addresses if address != preferred))
+    last_error: httpx.HTTPError | None = None
+    for address in addresses:
+        request_url, headers, extensions = _pinned_request(safe_url, address)
+        try:
+            async with client.stream("GET", request_url, headers=headers, extensions=extensions) as response:
+                _assert_public_peer(response)
+                if response.status_code in {301, 302, 303, 307, 308} and response.headers.get("location"):
+                    if redirects >= 3:
+                        raise HTTPException(status_code=400, detail="The target redirected too many times")
+                    if preferred_addresses is not None:
+                        preferred_addresses[hostname] = address
+                    return await _fetch(
+                        client,
+                        urljoin(safe_url, response.headers["location"]),
+                        redirects + 1,
+                        preferred_addresses,
+                    )
+                chunks = bytearray()
+                async for chunk in response.aiter_bytes():
+                    chunks.extend(chunk)
+                    if len(chunks) > MAX_RESPONSE_BYTES:
+                        break
+                content_type = response.headers.get("content-type", "").lower()
+                textual = any(item in content_type for item in ("text", "json", "javascript", "xml")) or not content_type
+                text = (
+                    bytes(chunks[:MAX_RESPONSE_BYTES]).decode(response.encoding or "utf-8", errors="replace")
+                    if textual
+                    else ""
+                )
+                if preferred_addresses is not None:
+                    preferred_addresses[hostname] = address
+                return {
+                    "url": safe_url,
+                    "status": response.status_code,
+                    "headers": dict(response.headers),
+                    "content_type": content_type,
+                    "text": text,
+                    "truncated": len(chunks) > MAX_RESPONSE_BYTES,
+                }
+        except httpx.HTTPError as error:
+            last_error = error
+            continue
+
+    logger.warning("Public fetch failed for host=%s error=%s", hostname, type(last_error).__name__)
+    if isinstance(last_error, httpx.TimeoutException):
+        raise HTTPException(
+            status_code=504,
+            detail="The target did not respond before the safe timeout. Please try again.",
+        ) from last_error
+    if isinstance(last_error, httpx.ConnectError):
+        raise HTTPException(
+            status_code=502,
+            detail="LeakShield could not establish a public HTTP/TLS connection. Check that the site is online and its certificate is valid.",
+        ) from last_error
+    raise HTTPException(
+        status_code=502,
+        detail="The target closed or rejected the scanner connection. The site may block automated security checks.",
+    ) from last_error
 
 
 def _assert_public_peer(response: httpx.Response) -> None:
@@ -287,16 +331,21 @@ async def _ssl_assessment(url: str) -> dict[str, Any]:
     if parsed.scheme != "https":
         return {"valid": False, "error": "The target does not use HTTPS", "days_remaining": 0, "weak_configuration": True}
     try:
-        safe_url, address = await _resolve_public_target(url)
+        safe_url, addresses = await _resolve_public_target(url)
         safe_host = urlparse(safe_url).hostname or ""
-        return await asyncio.to_thread(_ssl_sync, safe_host, address, parsed.port or 443)
+        for address in addresses:
+            try:
+                return await asyncio.to_thread(_ssl_sync, safe_host, address, parsed.port or 443)
+            except (OSError, ssl.SSLError, KeyError, ValueError):
+                continue
     except (OSError, ssl.SSLError, KeyError, ValueError):
-        return {
-            "valid": False,
-            "error": "TLS negotiation or certificate validation failed",
-            "days_remaining": 0,
-            "weak_configuration": True,
-        }
+        pass
+    return {
+        "valid": False,
+        "error": "TLS negotiation or certificate validation failed",
+        "days_remaining": 0,
+        "weak_configuration": True,
+    }
 
 
 async def _subdomain_assessment(client: httpx.AsyncClient, hostname: str) -> list[dict[str, Any]]:
@@ -319,7 +368,10 @@ async def _subdomain_assessment(client: httpx.AsyncClient, hostname: str) -> lis
         async with resolver_slots:
             try:
                 addresses = await asyncio.to_thread(socket.getaddrinfo, name, None, type=socket.SOCK_STREAM)
-                ips = sorted({item[4][0] for item in addresses})
+                ips = sorted(
+                    {item[4][0].split("%")[0] for item in addresses},
+                    key=lambda address: (ipaddress.ip_address(address).version, address),
+                )
             except OSError:
                 return {"hostname": name, "alive": False, "status": None, "ips": [], "technology": None, "ssl": None}
             if not ips or any(not _is_global_address(address) for address in ips):
@@ -336,23 +388,26 @@ async def _subdomain_assessment(client: httpx.AsyncClient, hostname: str) -> lis
             server = None
             tls = False
             for scheme in ("https", "http"):
-                try:
-                    safe_url = f"{scheme}://{name}/"
-                    request_url, headers, extensions = _pinned_request(safe_url, ips[0])
-                    async with client.stream(
-                        "GET",
-                        request_url,
-                        headers=headers,
-                        extensions=extensions,
-                        timeout=2.5,
-                    ) as response:
-                        _assert_public_peer(response)
-                        status = response.status_code
-                        server = response.headers.get("server")
-                        tls = scheme == "https"
-                        break
-                except (HTTPException, httpx.HTTPError):
-                    continue
+                for address in ips[:MAX_TARGET_ADDRESSES]:
+                    try:
+                        safe_url = f"{scheme}://{name}/"
+                        request_url, headers, extensions = _pinned_request(safe_url, address)
+                        async with client.stream(
+                            "GET",
+                            request_url,
+                            headers=headers,
+                            extensions=extensions,
+                            timeout=2.5,
+                        ) as response:
+                            _assert_public_peer(response)
+                            status = response.status_code
+                            server = response.headers.get("server")
+                            tls = scheme == "https"
+                            break
+                    except (HTTPException, httpx.HTTPError):
+                        continue
+                if status is not None:
+                    break
         return {"hostname": name, "alive": status is not None, "status": status, "ips": ips, "technology": server, "ssl": tls}
 
     selected = sorted(names)[:30]
@@ -458,9 +513,17 @@ class WebsiteAssessmentEngine:
             timeout=timeout,
             limits=limits,
             follow_redirects=False,
-            headers={"User-Agent": "LeakShield-Pro/2.0 (+defensive-public-security-assessment)"},
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 (compatible; LeakShield-Pro/2.0; "
+                    "+defensive-public-security-assessment)"
+                ),
+                "Accept": "text/html,application/xhtml+xml,application/json,text/plain;q=0.9,*/*;q=0.5",
+                "Accept-Language": "en-US,en;q=0.8",
+            },
         ) as client:
-            homepage = await _fetch(client, start_url)
+            preferred_addresses: dict[str, str] = {}
+            homepage = await _fetch(client, start_url, preferred_addresses=preferred_addresses)
             canonical = homepage["url"]
             parsed = urlparse(canonical)
             hostname = parsed.hostname or ""
@@ -479,7 +542,7 @@ class WebsiteAssessmentEngine:
                     continue
                 seen.add(url)
                 try:
-                    result = await _fetch(client, url)
+                    result = await _fetch(client, url, preferred_addresses=preferred_addresses)
                     fetched.append(result)
                     if "html" in result["content_type"] and result["status"] < 400:
                         nested = LinkCollector()
