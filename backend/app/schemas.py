@@ -102,6 +102,11 @@ class FindingResponse(BaseModel):
     file_path: str | None = None
     source_address: str | None = None
     public_accessible: bool = False
+    location_type: str | None = None
+    affected_component: str | None = None
+    observed_evidence: str | None = None
+    expected_value: str | None = None
+    detection_method: str | None = None
     owasp: str | None = None
     cwe: str | None = None
     capec: str | None = None

@@ -166,7 +166,20 @@ class ScanService:
             explanation = {**item["explanation"]}
             explanation["_finding"] = {
                 key: item.get(key)
-                for key in ("confidence", "file_path", "source_address", "public_accessible", "owasp", "cwe", "capec")
+                for key in (
+                    "confidence",
+                    "file_path",
+                    "source_address",
+                    "public_accessible",
+                    "location_type",
+                    "affected_component",
+                    "observed_evidence",
+                    "expected_value",
+                    "detection_method",
+                    "owasp",
+                    "cwe",
+                    "capec",
+                )
             }
             self.session.add(
                 Finding(
@@ -240,6 +253,11 @@ class ScanService:
             file_path=finding_metadata.get("file_path"),
             source_address=finding_metadata.get("source_address"),
             public_accessible=finding_metadata.get("public_accessible", False),
+            location_type=finding_metadata.get("location_type"),
+            affected_component=finding_metadata.get("affected_component"),
+            observed_evidence=finding_metadata.get("observed_evidence"),
+            expected_value=finding_metadata.get("expected_value"),
+            detection_method=finding_metadata.get("detection_method"),
             owasp=finding_metadata.get("owasp", owasp),
             cwe=finding_metadata.get("cwe", cwe),
             capec=finding_metadata.get("capec", capec),

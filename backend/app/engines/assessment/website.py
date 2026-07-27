@@ -453,6 +453,12 @@ def _finding(
     address: str,
     header: str | None = None,
     header_value: str | None = None,
+    *,
+    location_type: str = "configuration",
+    affected_component: str | None = None,
+    observed_evidence: str | None = None,
+    expected_value: str | None = None,
+    detection_method: str | None = None,
 ) -> dict[str, Any]:
     score = SEVERITY_SCORE[severity]
     owasp, cwe, capec = mapping_for(category)
@@ -464,13 +470,18 @@ def _finding(
         "risk_score": score,
         "risk_level": severity,
         "value_hash": hashlib.sha256(f"{rule_id}:{address}".encode()).hexdigest(),
-        "value_preview": "Configuration finding",
-        "line_number": 1,
-        "column_start": 1,
-        "column_end": 1,
-        "context_snippet": address,
+        "value_preview": "Verified configuration evidence",
+        "line_number": 0,
+        "column_start": 0,
+        "column_end": 0,
+        "context_snippet": observed_evidence or summary,
         "source_address": address,
         "public_accessible": True,
+        "location_type": location_type,
+        "affected_component": affected_component or title,
+        "observed_evidence": observed_evidence or summary,
+        "expected_value": expected_value or header_value or remediation,
+        "detection_method": detection_method or "Passive inspection of the publicly accessible service response.",
         "confidence": 0.95,
         "owasp": owasp,
         "cwe": cwe,
@@ -616,6 +627,19 @@ class WebsiteAssessmentEngine:
                                 "A sensitive-looking file path returned distinct public content and requires immediate manual verification.",
                                 "Restrict the path at the web server, remove the artifact from the deployment, and rotate any data it contained.",
                                 item["url"],
+                                location_type="public_url",
+                                affected_component=f"Public deployment path: {path}",
+                                observed_evidence=(
+                                    f"GET {item['url']} returned HTTP {item['status']} with content type "
+                                    f"{item['content_type'] or 'not declared'} and a distinct "
+                                    f"{len(item['text'].encode('utf-8'))}-byte response body. "
+                                    "The body was not displayed because it may contain sensitive data."
+                                ),
+                                expected_value="The path should return HTTP 404/403, require authorization, or not exist in the deployment.",
+                                detection_method=(
+                                    "Requested the known sensitive path and compared its response-body fingerprint "
+                                    "with the homepage to reduce false positives."
+                                ),
                             )
                         )
                 if item["text"]:
@@ -645,6 +669,21 @@ class WebsiteAssessmentEngine:
                                 "context_snippet": detection.context_snippet,
                                 "source_address": item["url"],
                                 "public_accessible": True,
+                                "location_type": "response_body",
+                                "affected_component": f"Public {kind} response body",
+                                "observed_evidence": (
+                                    f"{detection.rule.secret_type} pattern matched at response-body line "
+                                    f"{detection.line_number}, columns {detection.column_start}-"
+                                    f"{detection.column_end}. Redacted preview: {detection.value_preview}."
+                                ),
+                                "expected_value": (
+                                    "No credential, token, private key, or connection secret should appear "
+                                    "in a publicly accessible response."
+                                ),
+                                "detection_method": (
+                                    "Scanned the fetched public response with LeakShield secret signatures; "
+                                    "the displayed context and value remain redacted."
+                                ),
                                 "confidence": detection.rule.confidence,
                                 "owasp": owasp,
                                 "cwe": cwe,
@@ -666,6 +705,17 @@ class WebsiteAssessmentEngine:
                             canonical,
                             item["name"],
                             item["recommended_value"],
+                            location_type="http_response_header",
+                            affected_component=f"HTTP response header: {item['name']}",
+                            observed_evidence=(
+                                f"GET {canonical} returned HTTP {homepage['status']}; the "
+                                f"{item['name']} header was not present in the response."
+                            ),
+                            expected_value=f"{item['name']}: {item['recommended_value']}",
+                            detection_method=(
+                                "Sent a public GET request to the homepage and inspected the returned "
+                                "HTTP response headers case-insensitively."
+                            ),
                         )
                     )
 
@@ -673,6 +723,12 @@ class WebsiteAssessmentEngine:
                 dns_task, ssl_task, subdomains_task, intel_task
             )
             if not ssl_data.get("valid") or ssl_data.get("weak_configuration"):
+                tls_observation = ssl_data.get("error") or (
+                    f"Negotiated {ssl_data.get('tls_version') or 'an unknown TLS version'} with cipher "
+                    f"{ssl_data.get('cipher') or 'unknown'} at "
+                    f"{ssl_data.get('cipher_bits') or 'unknown'}-bit strength; this configuration "
+                    "was classified as weak."
+                )
                 findings.append(
                     _finding(
                         "weak-transport-security",
@@ -682,6 +738,17 @@ class WebsiteAssessmentEngine:
                         ssl_data.get("error") or "The negotiated TLS configuration is outdated or weak.",
                         "Use HTTPS everywhere with TLS 1.2 or newer, modern ciphers, and automated certificate renewal.",
                         canonical,
+                        location_type="tls_endpoint",
+                        affected_component=f"TLS service: {hostname}:{urlparse(canonical).port or 443}",
+                        observed_evidence=tls_observation,
+                        expected_value=(
+                            "A valid certificate, TLS 1.2 or TLS 1.3, and a modern cipher "
+                            "providing at least 128-bit security."
+                        ),
+                        detection_method=(
+                            "Performed a certificate-validating TLS handshake directly with the public endpoint "
+                            "and recorded the negotiated protocol and cipher."
+                        ),
                     )
                 )
             elif ssl_data.get("days_remaining", 365) < 30:
@@ -694,9 +761,23 @@ class WebsiteAssessmentEngine:
                         f"The certificate has {ssl_data['days_remaining']} day(s) remaining.",
                         "Renew the certificate and verify automated renewal before the remaining window closes.",
                         canonical,
+                        location_type="tls_certificate",
+                        affected_component=f"TLS certificate: {hostname}:{urlparse(canonical).port or 443}",
+                        observed_evidence=(
+                            f"Certificate issued by {ssl_data.get('issuer') or 'unknown issuer'} expires at "
+                            f"{ssl_data.get('expires_at') or 'an unknown date'} "
+                            f"({ssl_data['days_remaining']} day(s) remaining)."
+                        ),
+                        expected_value="A valid production certificate with at least 30 days remaining and tested automatic renewal.",
+                        detection_method=(
+                            "Validated the public TLS certificate and calculated remaining validity "
+                            "from its notAfter timestamp."
+                        ),
                     )
                 )
             if dns_data["records"].get("MX") and not dns_data["records"].get("DMARC"):
+                dmarc_address = f"_dmarc.{hostname}"
+                mx_preview = ", ".join(dns_data["records"]["MX"][:3])
                 findings.append(
                     _finding(
                         "missing-dmarc",
@@ -705,7 +786,18 @@ class WebsiteAssessmentEngine:
                         "dns",
                         "The domain receives email but no DMARC TXT policy was discovered.",
                         "Publish a monitored DMARC policy, validate legitimate senders, then move toward quarantine or reject.",
-                        f"_dmarc.{hostname}",
+                        dmarc_address,
+                        location_type="dns_record",
+                        affected_component=f"DNS TXT record: {dmarc_address}",
+                        observed_evidence=(
+                            f"MX records confirm that the domain receives email ({mx_preview}), but the TXT lookup "
+                            f"for {dmarc_address} returned no record beginning with v=DMARC1."
+                        ),
+                        expected_value=f'A TXT record at {dmarc_address} beginning with "v=DMARC1; p=...".',
+                        detection_method=(
+                            "Resolved the domain's public MX records, then queried the _dmarc TXT record "
+                            "and checked for a DMARC policy."
+                        ),
                     )
                 )
 

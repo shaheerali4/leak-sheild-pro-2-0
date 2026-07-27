@@ -940,6 +940,24 @@ function FindingCard({ finding }) {
   const address = finding.file_path || finding.source_address || finding.source_name;
   const learning = finding.explanation.learning;
   const fixes = finding.explanation.developer_fixes;
+  const hasSourceCoordinates =
+    Boolean(finding.file_path) ||
+    finding.location_type === "response_body" ||
+    (!finding.source_address && finding.line_number > 0);
+  const locationLabels = {
+    http_response_header: "HTTP response header",
+    tls_endpoint: "TLS endpoint",
+    tls_certificate: "TLS certificate",
+    dns_record: "DNS record",
+    public_url: "Public URL",
+    response_body: "Response body",
+    configuration: "Configuration"
+  };
+  const locationLabel = locationLabels[finding.location_type] || (hasSourceCoordinates ? "Source code" : "Remote configuration");
+  const observedEvidence =
+    finding.observed_evidence ||
+    (hasSourceCoordinates ? finding.context_snippet : finding.explanation.summary);
+  const expectedValue = finding.expected_value || finding.explanation.remediation;
   return (
     <article className="finding-card">
       <div className="flex items-start justify-between gap-3">
@@ -951,7 +969,7 @@ function FindingCard({ finding }) {
         <span className={`risk-badge ${levels[finding.risk_level]}`}>{finding.risk_level}</span>
       </div>
       <div className="finding-metrics">
-        <span>Line {finding.line_number}</span>
+        <span>{hasSourceCoordinates ? `Line ${finding.line_number}` : locationLabel}</span>
         <span>Score {finding.risk_score}</span>
         <span>{finding.confidence ? `${Math.round(finding.confidence * 100)}% conf` : finding.severity}</span>
       </div>
@@ -959,14 +977,49 @@ function FindingCard({ finding }) {
         <div className="address-panel">
           <div className="flex items-center gap-2 text-xs uppercase text-slate-500">
             <FileCode2 className="h-3.5 w-3.5" />
-            Specific address
+            {hasSourceCoordinates ? "Exact source location" : "Affected public location"}
           </div>
           <code>
-            {address}:{finding.line_number}:{finding.column_start}
+            {hasSourceCoordinates ? `${address}:${finding.line_number}:${finding.column_start}` : address}
           </code>
           {finding.public_accessible && <span>Publicly accessible surface confirmed</span>}
+          {!hasSourceCoordinates && (
+            <span>Remote configuration finding. A public scan can identify the affected control, but not the private server source file that defines it.</span>
+          )}
         </div>
       )}
+      <div className="evidence-panel">
+        <div className="flex items-center gap-2 text-xs uppercase text-slate-500">
+          <Fingerprint className="h-3.5 w-3.5" />
+          Technical evidence
+        </div>
+        <dl className="evidence-grid">
+          <div>
+            <dt>Affected component</dt>
+            <dd>{finding.affected_component || finding.secret_type}</dd>
+          </div>
+          <div>
+            <dt>Observed by LeakShield</dt>
+            <dd>{observedEvidence}</dd>
+          </div>
+          <div>
+            <dt>Expected secure state</dt>
+            <dd><code>{expectedValue}</code></dd>
+          </div>
+          {finding.detection_method && (
+            <div>
+              <dt>How it was verified</dt>
+              <dd>{finding.detection_method}</dd>
+            </div>
+          )}
+          {hasSourceCoordinates && finding.context_snippet && (
+            <div>
+              <dt>Redacted source context</dt>
+              <dd><code>{finding.context_snippet}</code></dd>
+            </div>
+          )}
+        </dl>
+      </div>
       <p className="mt-4 text-sm text-slate-200">{finding.explanation.summary}</p>
       <div className="impact-box">
         <div className="flex items-center gap-2 text-xs uppercase text-slate-500">

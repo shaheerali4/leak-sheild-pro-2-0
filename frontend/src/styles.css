@@ -874,6 +874,7 @@ button {
 .finding-card,
 .user-record-box,
 .address-panel,
+.evidence-panel,
 .impact-box {
   border: 1px solid rgba(148, 163, 184, 0.16);
   border-radius: 8px;
@@ -945,6 +946,7 @@ button {
 }
 
 .address-panel,
+.evidence-panel,
 .impact-box {
   margin-top: 0.85rem;
   padding: 0.8rem;
@@ -953,6 +955,46 @@ button {
 .address-panel span {
   font-size: 0.76rem;
   line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.evidence-panel {
+  border-color: rgba(103, 232, 249, 0.22);
+  background:
+    linear-gradient(135deg, rgba(8, 145, 178, 0.08), transparent 58%),
+    rgba(2, 6, 23, 0.52);
+}
+
+.evidence-grid {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.7rem;
+}
+
+.evidence-grid > div {
+  border-left: 2px solid rgba(103, 232, 249, 0.24);
+  padding-left: 0.7rem;
+}
+
+.evidence-grid dt {
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.evidence-grid dd {
+  margin-top: 0.25rem;
+  color: #dbeafe;
+  font-size: 0.78rem;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.evidence-grid code {
+  color: #67e8f9;
   white-space: pre-wrap;
 }
 

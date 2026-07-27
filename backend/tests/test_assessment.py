@@ -38,12 +38,24 @@ def test_finding_contains_learning_mode_and_official_references() -> None:
         "https://example.com/",
         "Content-Security-Policy",
         "default-src 'self'",
+        location_type="http_response_header",
+        affected_component="HTTP response header: Content-Security-Policy",
+        observed_evidence="The Content-Security-Policy header was absent from the HTTP 200 response.",
+        expected_value="Content-Security-Policy: default-src 'self'",
+        detection_method="Inspected the public homepage response headers.",
     )
 
     learning = finding["explanation"]["learning"]
     assert learning["remediation_steps"]
     assert all(reference["url"].startswith("https://") for reference in learning["references"])
     assert finding["explanation"]["developer_fixes"]["snippets"]["Nginx"]
+    assert finding["line_number"] == 0
+    assert finding["column_start"] == 0
+    assert finding["location_type"] == "http_response_header"
+    assert finding["affected_component"] == "HTTP response header: Content-Security-Policy"
+    assert "absent" in finding["observed_evidence"]
+    assert finding["expected_value"].startswith("Content-Security-Policy:")
+    assert finding["detection_method"].startswith("Inspected")
 
 
 @pytest.mark.parametrize(("score", "grade"), [(95, "A"), (84, "B"), (72, "C"), (60, "D"), (20, "F")])
