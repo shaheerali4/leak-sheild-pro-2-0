@@ -6,7 +6,7 @@ import logging
 import re
 import socket
 import ssl
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
@@ -16,11 +16,21 @@ import dns.exception
 import httpx
 from fastapi import HTTPException
 
+from app.engines.assessment.web_signals import (
+    WebSignal,
+    analyze_headers,
+    analyze_html,
+    analyze_javascript,
+    coverage_matrix,
+    detect_technologies,
+    lookup_nvd_cves,
+    port_signals,
+    scan_ports,
+)
 from app.engines.detection import DetectionEngine
 from app.engines.education import developer_fixes, learning_guide, mapping_for
 from app.engines.explanation import ExplanationEngine
 from app.engines.risk import RiskEngine
-
 
 MAX_RESPONSE_BYTES = 600_000
 MAX_PAGES = 20
@@ -42,8 +52,30 @@ COMMON_PATHS = (
     "/backup.zip",
     "/database.sql",
     "/config.json",
+    "/config.php",
+    "/phpinfo.php",
+    "/web.config",
+    "/.DS_Store",
+    "/backup.bak",
+    "/index.php.bak",
+    "/site.zip",
+    "/debug",
+    "/server-status",
 )
-EXPOSURE_PATHS = {"/.env", "/.git/config", "/backup.zip", "/database.sql", "/config.json"}
+EXPOSURE_PATHS = {
+    "/.env",
+    "/.git/config",
+    "/backup.zip",
+    "/database.sql",
+    "/config.json",
+    "/config.php",
+    "/web.config",
+    "/.DS_Store",
+    "/backup.bak",
+    "/index.php.bak",
+    "/site.zip",
+}
+PUBLIC_SURFACE_PATHS = {"/login", "/admin", "/dashboard", "/api/docs", "/docs", "/debug", "/phpinfo.php", "/server-status"}
 HEADER_RULES = (
     ("content-security-policy", "Content-Security-Policy", "HIGH", "default-src 'self'; object-src 'none'; base-uri 'self'"),
     ("strict-transport-security", "Strict-Transport-Security", "HIGH", "max-age=31536000; includeSubDomains"),
@@ -156,6 +188,7 @@ async def _fetch(
     url: str,
     redirects: int = 0,
     preferred_addresses: dict[str, str] | None = None,
+    request_headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     safe_url, addresses = await _resolve_public_target(url)
     hostname = urlparse(safe_url).hostname or "target"
@@ -164,7 +197,8 @@ async def _fetch(
         addresses = (preferred, *(address for address in addresses if address != preferred))
     last_error: httpx.HTTPError | None = None
     for address in addresses:
-        request_url, headers, extensions = _pinned_request(safe_url, address)
+        request_url, pinned_headers, extensions = _pinned_request(safe_url, address)
+        headers = {**(request_headers or {}), **pinned_headers}
         try:
             async with client.stream("GET", request_url, headers=headers, extensions=extensions) as response:
                 _assert_public_peer(response)
@@ -176,8 +210,9 @@ async def _fetch(
                     return await _fetch(
                         client,
                         urljoin(safe_url, response.headers["location"]),
-                        redirects + 1,
-                        preferred_addresses,
+                        redirects=redirects + 1,
+                        preferred_addresses=preferred_addresses,
+                        request_headers=request_headers,
                     )
                 chunks = bytearray()
                 async for chunk in response.aiter_bytes():
@@ -197,6 +232,7 @@ async def _fetch(
                     "url": safe_url,
                     "status": response.status_code,
                     "headers": dict(response.headers),
+                    "set_cookies": response.headers.get_list("set-cookie"),
                     "content_type": content_type,
                     "text": text,
                     "truncated": len(chunks) > MAX_RESPONSE_BYTES,
@@ -307,23 +343,26 @@ async def _dns_assessment(hostname: str) -> dict[str, Any]:
 
 def _ssl_sync(hostname: str, address: str, port: int) -> dict[str, Any]:
     context = ssl.create_default_context()
-    with socket.create_connection((address, port), timeout=5) as raw_socket:
-        with context.wrap_socket(raw_socket, server_hostname=hostname) as secure_socket:
-            certificate = secure_socket.getpeercert()
-            expires = datetime.strptime(certificate["notAfter"], "%b %d %H:%M:%S %Y %Z").replace(tzinfo=timezone.utc)
-            issuer = {key: value for group in certificate.get("issuer", ()) for key, value in group}
-            cipher = secure_socket.cipher() or (None, None, None)
-            return {
-                "valid": True,
-                "issuer": issuer.get("organizationName") or issuer.get("commonName") or "Unknown",
-                "subject": dict(item[0] for item in certificate.get("subject", ())).get("commonName"),
-                "expires_at": expires.isoformat(),
-                "days_remaining": max(0, (expires - datetime.now(timezone.utc)).days),
-                "tls_version": secure_socket.version(),
-                "cipher": cipher[0],
-                "cipher_bits": cipher[2],
-                "weak_configuration": secure_socket.version() in {"TLSv1", "TLSv1.1"} or (cipher[2] or 0) < 128,
-            }
+    with (
+        socket.create_connection((address, port), timeout=5) as raw_socket,
+        context.wrap_socket(raw_socket, server_hostname=hostname) as secure_socket,
+    ):
+        certificate = secure_socket.getpeercert()
+        expires = datetime.strptime(certificate["notAfter"], "%b %d %H:%M:%S %Y %Z").replace(tzinfo=UTC)
+        issuer = {key: value for group in certificate.get("issuer", ()) for key, value in group}
+        cipher = secure_socket.cipher() or (None, None, None)
+        return {
+            "valid": True,
+            "issuer": issuer.get("organizationName") or issuer.get("commonName") or "Unknown",
+            "subject": dict(item[0] for item in certificate.get("subject", ())).get("commonName"),
+            "expires_at": expires.isoformat(),
+            "days_remaining": max(0, (expires - datetime.now(UTC)).days),
+            "tls_version": secure_socket.version(),
+            "cipher": cipher[0],
+            "cipher_bits": cipher[2],
+            "weak_configuration": secure_socket.version() in {"TLSv1", "TLSv1.1"}
+            or (cipher[2] or 0) < 128,
+        }
 
 
 async def _ssl_assessment(url: str) -> dict[str, Any]:
@@ -349,7 +388,7 @@ async def _ssl_assessment(url: str) -> dict[str, Any]:
 
 
 async def _subdomain_assessment(client: httpx.AsyncClient, hostname: str) -> list[dict[str, Any]]:
-    root = hostname[4:] if hostname.startswith("www.") else hostname
+    root = hostname.removeprefix("www.")
     names = {hostname, *(f"{prefix}.{root}" for prefix in ("www", "api", "admin", "dev", "staging", "mail"))}
     try:
         response = await client.get("https://crt.sh/", params={"q": f"%.{root}", "output": "json"}, timeout=5)
@@ -484,6 +523,7 @@ def _finding(
         "expected_value": expected_value or header_value or remediation,
         "detection_method": detection_method or "Passive inspection of the publicly accessible service response.",
         "confidence": 0.95,
+        "verification_status": "detected",
         "owasp": owasp,
         "cwe": cwe,
         "capec": capec,
@@ -497,6 +537,56 @@ def _finding(
             "developer_fixes": developer_fixes(header, header_value),
         },
     }
+
+
+def _signal_finding(signal: WebSignal) -> dict[str, Any]:
+    finding = _finding(
+        signal.rule_id,
+        signal.title,
+        signal.severity,
+        signal.category,
+        signal.summary,
+        signal.remediation,
+        signal.address,
+        location_type=signal.location_type,
+        affected_component=signal.affected_component,
+        observed_evidence=signal.observed_evidence,
+        expected_value=signal.expected_value,
+        detection_method=signal.detection_method,
+    )
+    finding.update(
+        {
+            "value_preview": (
+                "Confirmed passive evidence" if signal.status == "detected" else "Potential indicator"
+            ),
+            "line_number": signal.line_number,
+            "column_start": signal.column_start,
+            "column_end": signal.column_end,
+            "confidence": signal.confidence,
+            "verification_status": signal.status,
+        }
+    )
+    return finding
+
+
+def _cookie_inventory(set_cookies: list[str]) -> list[dict[str, Any]]:
+    inventory = []
+    for index, cookie in enumerate(set_cookies[:20], start=1):
+        parts = [part.strip() for part in cookie.split(";")]
+        name = parts[0].split("=", 1)[0] or f"cookie-{index}"
+        attributes = {part.split("=", 1)[0].lower() for part in parts[1:]}
+        inventory.append(
+            {
+                "name": name,
+                "secure": "secure" in attributes,
+                "http_only": "httponly" in attributes,
+                "same_site": next(
+                    (part.split("=", 1)[1] for part in parts[1:] if part.lower().startswith("samesite=")),
+                    None,
+                ),
+            }
+        )
+    return inventory
 
 
 def _grade(score: float) -> str:
@@ -583,15 +673,33 @@ class WebsiteAssessmentEngine:
                     continue
 
             headers = _header_assessment(homepage["headers"])
-            technologies = _technology_assessment(homepage["text"], homepage["headers"], collector)
+            technologies = detect_technologies(
+                homepage["text"],
+                homepage["headers"],
+                collector.generators,
+                homepage["set_cookies"],
+            )
+            _resolved_url, target_addresses = await _resolve_public_target(canonical)
+            try:
+                cors_probe = await _fetch(
+                    client,
+                    canonical,
+                    preferred_addresses=preferred_addresses,
+                    request_headers={"Origin": "https://leakshield.invalid"},
+                )
+            except HTTPException:
+                cors_probe = {"headers": {}}
             dns_task = asyncio.create_task(_dns_assessment(hostname))
             ssl_task = asyncio.create_task(_ssl_assessment(canonical))
             subdomains_task = asyncio.create_task(_subdomain_assessment(client, hostname))
             intel_task = asyncio.create_task(_threat_intelligence(client, hostname))
+            ports_task = asyncio.create_task(scan_ports(target_addresses))
+            cves_task = asyncio.create_task(lookup_nvd_cves(client, technologies))
 
             endpoints = []
             javascript = {"files": [], "endpoints": [], "source_maps": [], "potential_secrets": 0}
             findings = []
+            forms: list[dict[str, Any]] = []
             homepage_hash = hashlib.sha256(homepage["text"].encode()).hexdigest()
             for item in fetched:
                 path = urlparse(item["url"]).path or "/"
@@ -616,6 +724,46 @@ class WebsiteAssessmentEngine:
                     javascript["endpoints"].extend(discovered[:80])
                     if re.search(r"sourceMappingURL=", item["text"]):
                         javascript["source_maps"].append(item["url"])
+                    findings.extend(_signal_finding(signal) for signal in analyze_javascript(item["url"], item["text"]))
+                elif item["text"]:
+                    page_signals, page_forms = analyze_html(item["url"], item["status"], item["text"])
+                    findings.extend(_signal_finding(signal) for signal in page_signals)
+                    forms.extend(page_forms)
+                if path in PUBLIC_SURFACE_PATHS and item["status"] == 200 and item["text"]:
+                    content_hash = hashlib.sha256(item["text"].encode()).hexdigest()
+                    if content_hash != homepage_hash:
+                        sensitive_surface = path in {"/debug", "/phpinfo.php", "/server-status"}
+                        findings.append(
+                            _finding(
+                                f"public-surface-{path.strip('/').replace('/', '-')}",
+                                f"Public application surface discovered at {path}",
+                                "MEDIUM" if sensitive_surface else "LOW",
+                                "exposure",
+                                (
+                                    "A public diagnostic surface returned distinct content and may disclose operational details."
+                                    if sensitive_surface
+                                    else "A public login, administration, or documentation surface was discovered. Its presence is not automatically a vulnerability."
+                                ),
+                                (
+                                    "Disable production diagnostics or require authorization."
+                                    if sensitive_surface
+                                    else "Confirm that the route is intended, strongly authenticated, rate limited, monitored, and excluded from search indexing where appropriate."
+                                ),
+                                item["url"],
+                                location_type="public_url",
+                                affected_component=f"Public route: {path}",
+                                observed_evidence=(
+                                    f"GET {item['url']} returned HTTP 200 with content type "
+                                    f"{item['content_type'] or 'not declared'} and a response distinct from the homepage."
+                                ),
+                                expected_value=(
+                                    "The route should be absent, access controlled, or intentionally public with documented safeguards."
+                                ),
+                                detection_method=(
+                                    "Requested a bounded list of common application routes and compared successful response fingerprints with the homepage."
+                                ),
+                            )
+                        )
                 if path in EXPOSURE_PATHS and item["status"] == 200 and item["text"]:
                     content_hash = hashlib.sha256(item["text"].encode()).hexdigest()
                     if content_hash != homepage_hash:
@@ -686,6 +834,7 @@ class WebsiteAssessmentEngine:
                                     "the displayed context and value remain redacted."
                                 ),
                                 "confidence": detection.rule.confidence,
+                                "verification_status": "potential",
                                 "owasp": owasp,
                                 "cwe": cwe,
                                 "capec": capec,
@@ -720,9 +869,70 @@ class WebsiteAssessmentEngine:
                         )
                     )
 
-            dns_data, ssl_data, subdomains, threat_intel = await asyncio.gather(
-                dns_task, ssl_task, subdomains_task, intel_task
+            response_signals = analyze_headers(
+                canonical,
+                homepage["status"],
+                homepage["headers"],
+                homepage["set_cookies"],
+                cors_probe["headers"],
             )
+            findings.extend(_signal_finding(signal) for signal in response_signals)
+
+            dns_data, ssl_data, subdomains, threat_intel, ports, cve_matches = await asyncio.gather(
+                dns_task,
+                ssl_task,
+                subdomains_task,
+                intel_task,
+                ports_task,
+                cves_task,
+            )
+            findings.extend(_signal_finding(signal) for signal in port_signals(hostname, ports))
+            cve_count = 0
+            for match in cve_matches:
+                for cve in match["cves"]:
+                    if not cve.get("id") or cve_count >= 8:
+                        continue
+                    severity = str(cve.get("severity") or "LOW").upper()
+                    if severity not in SEVERITY_SCORE:
+                        severity = "LOW"
+                    if cve.get("known_exploited"):
+                        severity = "CRITICAL"
+                    finding = _finding(
+                        f"nvd-{str(cve['id']).lower()}",
+                        f"Known CVE associated with {match['technology']} {match['version']}",
+                        severity,
+                        "exposure",
+                        (
+                            f"NVD associates {cve['id']} with the exact detected CPE version. "
+                            "The externally reported version still requires administrator confirmation."
+                        ),
+                        "Confirm the installed package and patch level, review the vendor advisory, and upgrade to a non-affected supported release.",
+                        canonical,
+                        location_type="software_version",
+                        affected_component=f"{match['technology']} {match['version']}",
+                        observed_evidence=(
+                            f"The public response fingerprint reported {match['technology']} {match['version']}. "
+                            f"An NVD cpeName query for {match['cpe']} returned {cve['id']}"
+                            f" with CVSS {cve.get('score') or 'not supplied'}"
+                            f"; CISA known-exploited={bool(cve.get('known_exploited'))}."
+                        ),
+                        expected_value="A vendor-supported version that is not listed as affected by the confirmed CVE.",
+                        detection_method=(
+                            "Extracted an explicit public software version, created an exact CPE 2.3 name, "
+                            "and queried the free NVD CVE API with isVulnerable enabled."
+                        ),
+                    )
+                    finding.update(
+                        {
+                            "confidence": 0.82,
+                            "verification_status": "potential",
+                            "value_preview": f"Exact-version NVD match: {cve['id']}",
+                            "external_reference": cve["url"],
+                            "cve": cve["id"],
+                        }
+                    )
+                    findings.append(finding)
+                    cve_count += 1
             if not ssl_data.get("valid") or ssl_data.get("weak_configuration"):
                 tls_observation = ssl_data.get("error") or (
                     f"Negotiated {ssl_data.get('tls_version') or 'an unknown TLS version'} with cipher "
@@ -804,6 +1014,7 @@ class WebsiteAssessmentEngine:
 
             deduped = {f"{item['rule_id']}:{item.get('source_address')}:{item['value_hash']}": item for item in findings}
             findings = sorted(deduped.values(), key=lambda item: item["risk_score"], reverse=True)[:500]
+            coverage = coverage_matrix(findings, forms, ports, cve_matches)
             risks = [item["risk_score"] for item in findings]
             overall_risk = round(min(100, (max(risks) if risks else 0) + min(10, max(0, len(risks) - 1))), 1)
             security_score = round(max(0, 100 - overall_risk), 1)
@@ -826,7 +1037,21 @@ class WebsiteAssessmentEngine:
             endpoint_urls = sorted({item["url"] for item in endpoints})
             phases = [
                 {"name": name, "status": "completed"}
-                for name in ("DNS", "SSL", "Headers", "Subdomains", "Crawling", "Technologies", "Analysis", "Advisor", "Report")
+                for name in (
+                    "DNS",
+                    "SSL",
+                    "Headers",
+                    "Cookies",
+                    "CORS",
+                    "Ports",
+                    "Subdomains",
+                    "Crawling",
+                    "Technologies",
+                    "CVE",
+                    "Analysis",
+                    "Advisor",
+                    "Report",
+                )
             ]
             return {
                 "source_name": canonical,
@@ -852,7 +1077,7 @@ class WebsiteAssessmentEngine:
                     "overall_grade": grade,
                     "risk_score": overall_risk,
                     "executive_summary": f"LeakShield assessed {len(endpoint_urls)} public endpoint(s) and identified {len(findings)} prioritized security finding(s).",
-                    "technical_summary": "Assessment covered HTTP headers, TLS, DNS, Certificate Transparency subdomains, technology fingerprints, JavaScript, public files, and exposed secret patterns.",
+                    "technical_summary": "Assessment covered HTTP headers, cookies, CORS, TLS, DNS, bounded ports, Certificate Transparency subdomains, forms, technology and exact-version CVE fingerprints, JavaScript, public files, and exposed secret patterns.",
                     "business_impact": findings[0]["explanation"]["business_impact"] if findings else "No material public weakness was identified in the tested surface.",
                     "likelihood": "High" if overall_risk >= 65 else "Medium" if overall_risk >= 35 else "Low",
                     "severity": risk_level,
@@ -875,6 +1100,16 @@ class WebsiteAssessmentEngine:
                         for item in endpoints
                     ],
                     "headers": headers,
+                    "cookies": _cookie_inventory(homepage["set_cookies"]),
+                    "cors": {
+                        "request_origin": "https://leakshield.invalid",
+                        "allow_origin": cors_probe["headers"].get("access-control-allow-origin"),
+                        "allow_credentials": cors_probe["headers"].get("access-control-allow-credentials"),
+                    },
+                    "forms": forms[:100],
+                    "ports": ports,
+                    "cve_matches": cve_matches,
+                    "coverage": coverage,
                     "ssl": ssl_data,
                     "dns": dns_data,
                     "technologies": technologies,
@@ -887,7 +1122,14 @@ class WebsiteAssessmentEngine:
                     "threat_intelligence": threat_intel,
                     "robots": next((item["text"] for item in fetched if urlparse(item["url"]).path == "/robots.txt" and item["status"] == 200), None),
                     "sitemap": next((item["text"][:20_000] for item in fetched if "sitemap" in urlparse(item["url"]).path and item["status"] == 200), None),
-                    "generated_at": datetime.now(timezone.utc).isoformat(),
-                    "disclaimer": "Passive and low-impact checks of publicly accessible content only. Potential exposures require manual verification.",
+                    "generated_at": datetime.now(UTC).isoformat(),
+                    "data_sources": [
+                        "Direct public HTTP/DNS/TLS checks",
+                        "Certificate Transparency (crt.sh)",
+                        "RDAP",
+                        "NIST NVD CVE API",
+                    ],
+                    "uses_shodan": False,
+                    "disclaimer": "Passive and low-impact public checks only. LeakShield does not submit injection payloads, upload files, guess credentials, bypass authorization, or use Shodan. Potential findings require authorized manual verification.",
                 },
             }

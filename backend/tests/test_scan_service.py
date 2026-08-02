@@ -45,6 +45,9 @@ def test_website_evidence_metadata_survives_persistence_mapping() -> None:
             "observed_evidence": "The header was absent from the HTTP 200 response.",
             "expected_value": "Content-Security-Policy: default-src 'self'",
             "detection_method": "Inspected the public homepage response headers.",
+            "verification_status": "detected",
+            "external_reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-0001",
+            "cve": "CVE-2026-0001",
         },
     }
     finding = Finding(
@@ -72,6 +75,9 @@ def test_website_evidence_metadata_survives_persistence_mapping() -> None:
     assert response.observed_evidence == "The header was absent from the HTTP 200 response."
     assert response.expected_value == "Content-Security-Policy: default-src 'self'"
     assert response.detection_method == "Inspected the public homepage response headers."
+    assert response.verification_status == "detected"
+    assert response.cve == "CVE-2026-0001"
+    assert response.external_reference.endswith("CVE-2026-0001")
 
 
 def test_project_hash_binds_finding_locations_to_file_paths() -> None:

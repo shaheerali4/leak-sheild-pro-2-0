@@ -942,7 +942,7 @@ function FindingCard({ finding }) {
   const fixes = finding.explanation.developer_fixes;
   const hasSourceCoordinates =
     Boolean(finding.file_path) ||
-    finding.location_type === "response_body" ||
+    ["response_body", "html_form"].includes(finding.location_type) ||
     (!finding.source_address && finding.line_number > 0);
   const locationLabels = {
     http_response_header: "HTTP response header",
@@ -951,6 +951,9 @@ function FindingCard({ finding }) {
     dns_record: "DNS record",
     public_url: "Public URL",
     response_body: "Response body",
+    html_form: "HTML form",
+    network_port: "Network port",
+    software_version: "Software version",
     project_file: "Project file",
     pasted_text: "Pasted text",
     configuration: "Configuration"
@@ -974,6 +977,7 @@ function FindingCard({ finding }) {
         <span>{hasSourceCoordinates ? `Line ${finding.line_number}` : locationLabel}</span>
         <span>Score {finding.risk_score}</span>
         <span>{finding.confidence ? `${Math.round(finding.confidence * 100)}% conf` : finding.severity}</span>
+        {finding.verification_status && <span>{finding.verification_status}</span>}
       </div>
       {address && (
         <div className="address-panel">
@@ -1018,6 +1022,12 @@ function FindingCard({ finding }) {
             <dt>Finding fingerprint</dt>
             <dd><code>SHA-256 {finding.value_hash}</code></dd>
           </div>
+          {finding.external_reference && (
+            <div>
+              <dt>Official advisory</dt>
+              <dd><a href={finding.external_reference} target="_blank" rel="noreferrer">{finding.cve || finding.external_reference}</a></dd>
+            </div>
+          )}
           {hasSourceCoordinates && finding.context_snippet && (
             <div>
               <dt>Redacted source context</dt>

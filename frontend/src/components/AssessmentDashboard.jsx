@@ -20,7 +20,7 @@ import {
   Waypoints
 } from "lucide-react";
 
-const tabs = ["overview", "surface", "infrastructure", "roadmap"];
+const tabs = ["overview", "controls", "surface", "infrastructure", "roadmap"];
 
 export default function AssessmentDashboard({ result }) {
   const [tab, setTab] = useState("overview");
@@ -122,6 +122,13 @@ export default function AssessmentDashboard({ result }) {
         </div>
       )}
 
+      {tab === "controls" && (
+        <div className="assessment-view controls-layout">
+          <CoverageMatrix coverage={assessment.coverage || []} />
+          <EvidenceInventory assessment={assessment} />
+        </div>
+      )}
+
       {tab === "infrastructure" && (
         <div className="assessment-view infrastructure-grid">
           <SslCard ssl={assessment.ssl || {}} />
@@ -200,7 +207,67 @@ function HeaderMatrix({ headers }) {
 }
 
 function TechnologyDeck({ technologies }) {
-  return <section className="mission-panel technology-deck"><SectionTitle icon={Code2} code="TECH-07" title="Technology Fingerprints" /><div>{technologies.map((item) => <span key={item.name}>{item.name}<small>{item.confidence}</small></span>)}</div>{!technologies.length && <p className="empty-state">No reliable technology signature was exposed.</p>}</section>;
+  return <section className="mission-panel technology-deck"><SectionTitle icon={Code2} code="TECH-07" title="Technology Fingerprints" /><div>{technologies.map((item) => <span key={item.name} title={item.evidence || "Public response fingerprint"}>{item.name}{item.version && <b>{item.version}</b>}<small>{item.category || "Technology"} / {item.confidence}</small></span>)}</div>{!technologies.length && <p className="empty-state">No reliable technology signature was exposed.</p>}</section>;
+}
+
+function CoverageMatrix({ coverage }) {
+  return (
+    <section className="mission-panel coverage-panel">
+      <SectionTitle icon={ShieldCheck} code="CTRL-29" title="Vulnerability Coverage" />
+      <p className="control-intro">Each row explains what LeakShield safely checked. “Requires testing” means the issue cannot be proven from a public, logged-out scan.</p>
+      <div className="coverage-grid">
+        {coverage.map((item) => (
+          <article key={item.name}>
+            <span className={`coverage-state coverage-${coverageTone(item.status)}`}>{item.status}</span>
+            <div><strong>{item.name}</strong><small>{item.method}</small></div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function EvidenceInventory({ assessment }) {
+  const openPorts = (assessment.ports || []).filter((item) => item.open);
+  const cves = (assessment.cve_matches || []).flatMap((match) =>
+    (match.cves || []).map((cve) => ({ ...cve, technology: match.technology, version: match.version }))
+  );
+  return (
+    <div className="control-inventory">
+      <section className="mission-panel control-card">
+        <SectionTitle icon={Network} code="PORT-04" title="Checked Network Ports" />
+        <p className="control-intro">TCP connection only. No service banners, credentials, or commands were sent.</p>
+        <div className="compact-evidence-list">
+          {openPorts.map((item) => <div key={item.port}><strong>{item.port}</strong><span>{item.service}</span><b>{item.port === 80 || item.port === 443 ? "EXPECTED" : item.severity}</b></div>)}
+          {!openPorts.length && <p className="empty-state">None of the bounded ports accepted a connection.</p>}
+        </div>
+      </section>
+
+      <section className="mission-panel control-card">
+        <SectionTitle icon={ShieldQuestion} code="WEB-12" title="Forms, Cookies & CORS" />
+        <DataRow label="Forms" value={assessment.forms?.length || 0} />
+        <DataRow label="File inputs" value={(assessment.forms || []).filter((item) => item.has_file_input).length} />
+        <DataRow label="Cookies" value={assessment.cookies?.length || 0} />
+        {(assessment.cookies || []).slice(0, 8).map((cookie) => <DataRow key={cookie.name} label={cookie.name} value={`${cookie.secure ? "Secure" : "No Secure"} / ${cookie.http_only ? "HttpOnly" : "No HttpOnly"} / SameSite ${cookie.same_site || "missing"}`} />)}
+        <DataRow label="CORS origin" value={assessment.cors?.allow_origin || "Not granted"} />
+      </section>
+
+      <section className="mission-panel control-card cve-card">
+        <SectionTitle icon={FileSearch} code="CVE-16" title="Exact-Version CVE Correlation" />
+        <p className="control-intro">Only explicit versions are queried. A match still needs administrator confirmation because public version headers can be hidden or altered.</p>
+        <div className="cve-list">
+          {cves.slice(0, 12).map((cve) => <a key={`${cve.id}-${cve.technology}`} href={safeHttpUrl(cve.url) || "#"} target="_blank" rel="noreferrer"><span><strong>{cve.id}</strong><small>{cve.technology} {cve.version}</small></span><b>{cve.severity}{cve.score ? ` ${cve.score}` : ""}</b><ExternalLink className="h-4 w-4" /></a>)}
+          {!cves.length && <p className="empty-state">No exact-version NVD match was returned. This does not prove the software is vulnerability-free.</p>}
+        </div>
+      </section>
+
+      <section className="mission-panel control-card">
+        <SectionTitle icon={Cloud} code="FREE-00" title="Free Data Sources" />
+        {(assessment.data_sources || []).map((source) => <DataRow key={source} label="Source" value={source} />)}
+        <DataRow label="Shodan" value={assessment.uses_shodan ? "Enabled" : "Not used / no API key required"} />
+      </section>
+    </div>
+  );
 }
 
 function Comparison({ comparison }) {
@@ -236,6 +303,15 @@ function statusTone(status) {
   if (status >= 200 && status < 300) return "green";
   if (status >= 300 && status < 400) return "amber";
   return "red";
+}
+
+function coverageTone(status) {
+  const normalized = status.toLowerCase();
+  if (normalized === "detected" || normalized === "potential surface") return "detected";
+  if (normalized.includes("requires") || normalized.includes("not tested")) return "manual";
+  if (normalized.includes("not actively")) return "manual";
+  if (normalized.includes("unavailable")) return "manual";
+  return "clear";
 }
 
 function safeHttpUrl(value) {

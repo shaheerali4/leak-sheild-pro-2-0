@@ -1,10 +1,9 @@
-from datetime import datetime
 import json
 import re
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
 
 MAX_FILE_BYTES = 300_000
 MAX_PROJECT_BYTES = 1_200_000
@@ -107,6 +106,9 @@ class FindingResponse(BaseModel):
     observed_evidence: str | None = None
     expected_value: str | None = None
     detection_method: str | None = None
+    verification_status: str | None = None
+    external_reference: str | None = None
+    cve: str | None = None
     owasp: str | None = None
     cwe: str | None = None
     capec: str | None = None

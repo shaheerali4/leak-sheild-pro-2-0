@@ -31,12 +31,16 @@ Vercel and Docker now share the same FastAPI API for text, project-folder, websi
 
 - Public same-origin crawl with robots.txt, sitemap.xml, common security paths, redirects, and JavaScript-discovered links
 - Certificate Transparency and DNS-based subdomain enumeration with alive/status/TLS/server evidence
-- HTTP security headers, certificate/TLS, DNS/SPF/DMARC/DKIM/CAA/DNSSEC, and RDAP network intelligence
-- Technology fingerprinting, public Git/config/backup checks, source-map detection, and redacted public secret patterns
+- HTTP security headers, clickjacking, cookies, CORS, certificate/TLS, DNS/SPF/DMARC/DKIM/CAA/DNSSEC, and RDAP network intelligence
+- Wappalyzer-style technology and explicit-version fingerprinting for common servers, languages, CMS products, frameworks, CDNs, and JavaScript libraries
+- Static forms/CSRF/file-upload surface analysis, passive SQL error and DOM-XSS indicators, public admin/login routes, directory indexes, public Git/config/backup checks, source maps, and redacted secret patterns
+- Bounded TCP port checks and exact-version CVE correlation through the free public NIST NVD API
 - Security grade, risk score, OWASP/CWE/CAPEC mapping, deterministic Security Advisor, remediation roadmap, scan comparison, and print-to-PDF reports
 - Expandable Learning Mode, framework-specific defensive snippets, and a searchable official-reference knowledge base
 
-Website assessment is defensive and low impact: only public HTTP(S) targets are accepted, private/reserved IP ranges are blocked, redirects are revalidated, response sizes and crawl breadth are bounded, and findings are labelled as potential exposures requiring verification. No paid API or model is required.
+Website assessment is defensive and low impact: only public HTTP(S) targets are accepted, private/reserved IP ranges are blocked, redirects are revalidated, response sizes and crawl breadth are bounded, and findings distinguish detected evidence from potential indicators and checks requiring authorization. LeakShield does not submit SQLi/XSS/traversal payloads, upload files, guess default credentials, or attempt authorization bypasses. Those issues require an explicitly authorized authenticated assessment before they can be confirmed.
+
+LeakShield does **not** use Shodan and requires no Shodan API key. Website intelligence comes from direct public HTTP/DNS/TLS checks, Certificate Transparency through crt.sh, RDAP, and exact-version NIST NVD queries. These sources are free and no paid API or AI model is required.
 
 The admin API requires `ADMIN_EMAIL` and `ADMIN_PASSWORD`. Setting a separate high-entropy `ADMIN_SESSION_SECRET` is recommended; otherwise session signing is derived from the configured admin credentials. Private audit persistence additionally uses Vercel Blob when its storage variables are available.
 

@@ -1,7 +1,7 @@
 import asyncio
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import HTTPException
@@ -225,6 +225,9 @@ class ScanService:
                     "observed_evidence",
                     "expected_value",
                     "detection_method",
+                    "verification_status",
+                    "external_reference",
+                    "cve",
                     "owasp",
                     "cwe",
                     "capec",
@@ -249,7 +252,7 @@ class ScanService:
             )
         await self.session.commit()
         await self.session.refresh(scan)
-        result.update({"id": scan.id, "created_at": scan.created_at or datetime.now(timezone.utc), "cache_hit": False})
+        result.update({"id": scan.id, "created_at": scan.created_at or datetime.now(UTC), "cache_hit": False})
         response = ScanResponse(**result)
         await cache_client.set_json(f"website:{result['content_hash']}", response.model_dump(mode="json"), ttl=900)
         return response
@@ -269,7 +272,7 @@ class ScanService:
             overall_level=scan.overall_level,
             finding_count=scan.finding_count,
             cache_hit=cache_hit,
-            created_at=scan.created_at or datetime.now(timezone.utc),
+            created_at=scan.created_at or datetime.now(UTC),
             findings=[
                 cls._finding_response(finding, finding.explanation)
                 for finding in sorted(scan.findings, key=lambda item: (item.line_number, item.column_start))
@@ -307,6 +310,9 @@ class ScanService:
             observed_evidence=finding_metadata.get("observed_evidence"),
             expected_value=finding_metadata.get("expected_value"),
             detection_method=finding_metadata.get("detection_method"),
+            verification_status=finding_metadata.get("verification_status"),
+            external_reference=finding_metadata.get("external_reference"),
+            cve=finding_metadata.get("cve"),
             owasp=finding_metadata.get("owasp", owasp),
             cwe=finding_metadata.get("cwe", cwe),
             capec=finding_metadata.get("capec", capec),
