@@ -1,54 +1,51 @@
 import { useDeferredValue, useState } from "react";
-import { BookOpen, ExternalLink, Search } from "lucide-react";
+import { ArrowUpRight, BookOpen, Search } from "lucide-react";
 import { knowledgeArticles } from "../data/knowledge";
 
 export default function KnowledgeBase() {
   const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState(knowledgeArticles[0]?.id || "");
   const deferredQuery = useDeferredValue(query.toLowerCase());
   const articles = knowledgeArticles.filter((article) =>
     Object.values(article).join(" ").toLowerCase().includes(deferredQuery)
   );
+  const selected = articles.find((article) => article.id === selectedId) || articles[0];
 
   return (
-    <section className="mission-panel knowledge-base" aria-labelledby="knowledge-title">
-      <div className="knowledge-head">
-        <div>
-          <div className="mono-label">LEARN-27 // OFFICIAL SOURCES</div>
-          <h2 id="knowledge-title">Interactive Security Knowledge Base</h2>
-          <p>Beginner-friendly guidance grounded in OWASP, MITRE, MDN, RFCs, and official documentation.</p>
+    <section className="knowledge-layout">
+      <aside className="panel knowledge-index">
+        <div className="knowledge-intro">
+          <span className="knowledge-mark"><BookOpen /></span>
+          <div><h2>Security knowledge base</h2><p>Clear guidance backed by official sources.</p></div>
         </div>
-        <label className="field-with-icon knowledge-search">
-          <Search className="h-4 w-4" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search headers, SSL, DNS, OWASP..." />
-        </label>
-      </div>
-      <div className="knowledge-grid">
-        {articles.map((article) => (
-          <details className="knowledge-card" key={article.id} name="knowledge-article">
-            <summary>
-              <BookOpen className="h-5 w-5" />
-              <span><small>{article.category}</small>{article.title}</span>
-            </summary>
-            <KnowledgeRow label="Definition" value={article.definition} />
-            <KnowledgeRow label="Why it matters" value={article.importance} />
-            <KnowledgeRow label="Detection" value={article.detection} />
-            <KnowledgeRow label="Common mistakes" value={article.mistakes} />
-            <KnowledgeRow label="Mitigation" value={article.mitigation} />
-            <div className="reference-row">
-              {article.references.map((reference) => (
-                <a href={reference.url} target="_blank" rel="noreferrer" key={reference.url}>
-                  {reference.title}<ExternalLink className="h-3.5 w-3.5" />
-                </a>
-              ))}
-            </div>
-          </details>
-        ))}
-      </div>
-      {!articles.length && <p className="empty-state">No knowledge article matches that search.</p>}
+        <label className="search-field"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search security topics" /></label>
+        <div className="article-index">
+          {articles.map((article) => (
+            <button className={selected?.id === article.id ? "active" : ""} key={article.id} onClick={() => setSelectedId(article.id)}>
+              <span>{article.category}</span><strong>{article.title}</strong>
+            </button>
+          ))}
+          {!articles.length && <p>No article matches that search.</p>}
+        </div>
+      </aside>
+
+      <article className="panel knowledge-article">
+        {selected ? (
+          <>
+            <header><span className="eyebrow">{selected.category}</span><h2>{selected.title}</h2><p>Beginner-friendly explanations with enough detail for experienced developers.</p></header>
+            <KnowledgeSection title="Definition" value={selected.definition} />
+            <KnowledgeSection title="Why it matters" value={selected.importance} />
+            <KnowledgeSection title="How LeakShield detects it" value={selected.detection} />
+            <KnowledgeSection title="Common mistakes" value={selected.mistakes} />
+            <KnowledgeSection title="Mitigation" value={selected.mitigation} />
+            <section className="knowledge-references"><h3>Official references</h3>{selected.references.map((reference) => <a href={reference.url} target="_blank" rel="noreferrer" key={reference.url}>{reference.title}<ArrowUpRight /></a>)}</section>
+          </>
+        ) : <div className="empty-state"><BookOpen /><strong>No article selected</strong><p>Choose a topic from the left.</p></div>}
+      </article>
     </section>
   );
 }
 
-function KnowledgeRow({ label, value }) {
-  return <div className="knowledge-row"><strong>{label}</strong><p>{value}</p></div>;
+function KnowledgeSection({ title, value }) {
+  return <section><h3>{title}</h3><p>{value}</p></section>;
 }

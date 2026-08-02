@@ -1,32 +1,5 @@
-import { lazy, memo, Suspense, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import {
-  Activity,
-  AlertTriangle,
-  ChevronDown,
-  Cpu,
-  Database,
-  FileCode2,
-  Filter,
-  Fingerprint,
-  FolderOpen,
-  Gauge,
-  Globe2,
-  History,
-  KeyRound,
-  Link2,
-  Loader2,
-  LockKeyhole,
-  Moon,
-  RefreshCw,
-  ScanLine,
-  Search,
-  ShieldAlert,
-  ShieldCheck,
-  TerminalSquare,
-  UploadCloud,
-  Sun,
-  Zap
-} from "lucide-react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, Database, Loader2, LockKeyhole, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import {
   adminLogin,
   adminLogout,
@@ -38,218 +11,132 @@ import {
   getScan,
   listScans
 } from "./api";
-
-const AssessmentDashboard = lazy(() => import("./components/AssessmentDashboard"));
-const KnowledgeBase = lazy(() => import("./components/KnowledgeBase"));
+import EnterpriseShell, { BrandMark } from "./components/EnterpriseShell";
+import {
+  AssetsView,
+  CveView,
+  DashboardView,
+  FindingsView,
+  HelpView,
+  HistoryView,
+  IntegrationsView,
+  ReportsView,
+  ScanView,
+  SettingsView,
+  SeverityBadge
+} from "./components/PlatformViews";
 
 const defaultInput = `# Paste code, configuration, logs, or public URLs here.
-# LeakShield will flag exposed credentials, risky connection strings,
-# public tokens, and other deployment weaknesses when you run a scan.
+# LeakShield flags exposed credentials, risky connection strings,
+# public tokens, and deployment weaknesses without revealing secret values.
 
 service_name=public-demo
 environment=review
 scan_target=https://example.com`;
 const MAX_FOLDER_FILE_BYTES = 300_000;
 const MAX_FOLDER_TOTAL_BYTES = 1_200_000;
-
-const levels = {
-  LOW: "text-cyan-200 border-cyan-300/40 bg-cyan-300/10",
-  MEDIUM: "text-amber-200 border-amber-300/40 bg-amber-300/10",
-  HIGH: "text-orange-200 border-orange-300/40 bg-orange-300/10",
-  CRITICAL: "text-rose-200 border-rose-300/50 bg-rose-400/10"
-};
-
-const findingGroupDefinitions = [
-  { id: "application", title: "Application Security", code: "APP", description: "SQL, XSS, CSRF, redirects, authentication forms, and upload surfaces" },
-  { id: "headers", title: "Security Headers", code: "HDR", description: "Missing or weak browser protection and information-bearing response headers" },
-  { id: "browser", title: "Cookies & CORS", code: "WEB", description: "Session-cookie attributes and cross-origin access policy" },
-  { id: "transport", title: "SSL / TLS", code: "TLS", description: "Certificate validity, expiry, protocol, and cipher configuration" },
-  { id: "network", title: "Network & DNS", code: "NET", description: "Public ports, DNS records, and email-domain protection" },
-  { id: "exposure", title: "Public Exposure", code: "EXP", description: "Sensitive files, backups, diagnostics, admin routes, and directory indexes" },
-  { id: "cves", title: "Known CVEs", code: "CVE", description: "Official NVD matches for explicitly detected software versions" },
-  { id: "secrets", title: "Secrets & Credentials", code: "KEY", description: "Potential API keys, tokens, private keys, passwords, and connection strings" },
-  { id: "other", title: "Other Findings", code: "ETC", description: "Additional evidence that does not fit another security family" }
-];
-
-const severityOrder = { LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
-
-function findingGroupId(finding) {
-  const rule = (finding.rule_id || "").toLowerCase();
-  const location = finding.location_type || "";
-  if (rule.startsWith("nvd-")) return "cves";
-  if (rule.startsWith("weak-cookie-") || rule.startsWith("cors-")) return "browser";
-  if (location.startsWith("tls_") || rule.includes("transport-security") || rule.includes("certificate")) return "transport";
-  if (location === "dns_record" || rule === "missing-dmarc" || rule.startsWith("exposed-port-")) return "network";
-  if (
-    rule.includes("sql-") ||
-    rule.includes("xss") ||
-    rule.includes("csrf") ||
-    rule.includes("redirect") ||
-    rule.includes("file-upload") ||
-    rule.includes("password-form")
-  ) return "application";
-  if (
-    location === "http_response_header" ||
-    rule.startsWith("missing-") ||
-    rule.startsWith("weak-csp-") ||
-    rule.startsWith("weak-hsts-") ||
-    rule.startsWith("weak-security-header-") ||
-    rule.includes("clickjacking") ||
-    rule.startsWith("version-disclosure-")
-  ) return "headers";
-  if (
-    location === "public_url" ||
-    rule.startsWith("public-") ||
-    rule === "directory-listing" ||
-    rule === "debug-stack-trace"
-  ) return "exposure";
-  if (
-    location === "project_file" ||
-    location === "pasted_text" ||
-    location === "response_body" ||
-    finding.secret_type?.toLowerCase().includes("potential")
-  ) return "secrets";
-  return "other";
-}
-
-const orbitSatellites = Array.from({ length: 26 }, (_, index) => index);
-const orbitMeridians = Array.from({ length: 14 }, (_, index) => index);
-const orbitLatitudes = Array.from({ length: 9 }, (_, index) => index);
-const orbitMeridianNodes = orbitMeridians.map((item) => (
-  <span key={`m-${item}`} className="meridian" style={{ "--i": item }} />
-));
-const orbitLatitudeNodes = orbitLatitudes.map((item) => (
-  <span key={`l-${item}`} className="latitude" style={{ "--i": item }} />
-));
-const orbitSatelliteNodes = orbitSatellites.map((item) => (
-  <span key={item} className="satellite-dot" style={{ "--i": item }} />
-));
+const views = new Set(["dashboard", "scan", "history", "assets", "findings", "cves", "reports", "integrations", "settings", "help"]);
 const SERVERLESS_FEATURES_ENABLED =
   import.meta.env.VITE_SERVERLESS_FEATURES === "true" ||
-  (import.meta.env.VITE_SERVERLESS_FEATURES !== "false" &&
-    typeof window !== "undefined" &&
-    !["localhost", "127.0.0.1"].includes(window.location.hostname));
+  (import.meta.env.VITE_SERVERLESS_FEATURES !== "false" && typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname));
 
-function riskColor(level) {
-  return {
-    LOW: "#6ee7f9",
-    MEDIUM: "#fbbf24",
-    HIGH: "#fb923c",
-    CRITICAL: "#fb7185"
-  }[level || "LOW"];
+function initialView() {
+  const value = window.location.hash.replace("#", "");
+  return views.has(value) ? value : "dashboard";
 }
 
 export default function App() {
-  const isAdminPath =
-    typeof window !== "undefined" &&
-    (window.location.pathname === "/admin" || new URLSearchParams(window.location.search).get("admin") === "true");
+  const isAdminPath = window.location.pathname === "/admin" || new URLSearchParams(window.location.search).get("admin") === "true";
+  if (isAdminPath) return SERVERLESS_FEATURES_ENABLED ? <AdminDashboard /> : <UnavailableAdmin />;
+  return <SecurityWorkspace />;
+}
+
+function SecurityWorkspace() {
+  const [activeView, setActiveView] = useState(initialView);
   const [content, setContent] = useState(defaultInput);
   const [sourceName, setSourceName] = useState("deployment.env");
-  const [scanMode, setScanMode] = useState("text");
+  const [scanMode, setScanMode] = useState(() => localStorage.getItem("leakshield.defaultMode") || "website");
   const [websiteUrl, setWebsiteUrl] = useState("");
   const [projectFiles, setProjectFiles] = useState([]);
   const [result, setResult] = useState(null);
   const [history, setHistory] = useState([]);
   const [query, setQuery] = useState("");
   const [riskFilter, setRiskFilter] = useState("");
-  const [findingFilter, setFindingFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [theme, setTheme] = useState(() => {
-    try {
-      return localStorage.getItem("leakshield.theme") || "dark";
-    } catch {
-      return "dark";
-    }
-  });
+  const [theme, setTheme] = useState(() => localStorage.getItem("leakshield.theme") || "light");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("leakshield.sidebarCollapsed") === "true");
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [clientSession] = useState(clientSessionId);
   const deferredQuery = useDeferredValue(query);
   const deferredRiskFilter = useDeferredValue(riskFilter);
-  const deferredFindingFilter = useDeferredValue(findingFilter);
-  const showTextMode = useCallback(() => setScanMode("text"), []);
-  const showFolderMode = useCallback(() => setScanMode("project-folder"), []);
-  const showWebsiteMode = useCallback(() => setScanMode("website"), []);
-  const scanStateRef = useRef({ content, sourceName, scanMode, websiteUrl, projectFiles });
+  const scanStateRef = useRef({ content, projectFiles, scanMode, sourceName, websiteUrl });
 
   useEffect(() => {
-    scanStateRef.current = { content, sourceName, scanMode, websiteUrl, projectFiles };
-  }, [content, sourceName, scanMode, websiteUrl, projectFiles]);
+    scanStateRef.current = { content, projectFiles, scanMode, sourceName, websiteUrl };
+  }, [content, projectFiles, scanMode, sourceName, websiteUrl]);
 
   const refreshHistory = useCallback(async () => {
-    const items = await listScans({ q: deferredQuery, riskLevel: deferredRiskFilter });
-    setHistory(items);
+    setHistory(await listScans({ q: deferredQuery, riskLevel: deferredRiskFilter }));
   }, [deferredQuery, deferredRiskFilter]);
 
-  useEffect(() => {
-    refreshHistory().catch(() => {});
-  }, [refreshHistory]);
-
+  useEffect(() => { refreshHistory().catch(() => {}); }, [refreshHistory]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    try {
-      localStorage.setItem("leakshield.theme", theme);
-    } catch {
-      // Theme remains active for the current page when storage is unavailable.
-    }
+    localStorage.setItem("leakshield.theme", theme);
   }, [theme]);
+  useEffect(() => {
+    document.documentElement.dataset.density = localStorage.getItem("leakshield.denseTables") === "true" ? "compact" : "comfortable";
+  }, []);
+  useEffect(() => {
+    const onHashChange = () => setActiveView(initialView());
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
+  const navigate = useCallback((view) => {
+    const safeView = views.has(view) ? view : "dashboard";
+    setActiveView(safeView);
+    window.history.replaceState(null, "", `#${safeView}`);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
 
-  const auditMetadata = useCallback(
-    () => ({
-      client_session_id: clientSession
-    }),
-    [clientSession]
-  );
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((current) => {
+      localStorage.setItem("leakshield.sidebarCollapsed", String(!current));
+      return !current;
+    });
+  }, []);
 
-  const scan = useCallback(async () => {
+  const toggleTheme = useCallback(() => setTheme((current) => current === "light" ? "dark" : "light"), []);
+
+  const scan = useCallback(async (scanOptions = {}) => {
     setLoading(true);
     setError("");
     try {
-      const { content, sourceName, scanMode, websiteUrl, projectFiles } = scanStateRef.current;
-      const payload =
-        scanMode === "website"
-          ? {
-              mode: "website",
-              website_url: websiteUrl,
-              source_name: websiteUrl || "website-scan",
-              metadata: { entrypoint: "website-url", submitted_at: new Date().toISOString() }
-            }
-          : scanMode === "project-folder"
-            ? {
-                mode: "project-folder",
-                files: projectFiles,
-                source_name: sourceName || "uploaded-project",
-                metadata: { entrypoint: "folder-upload", submitted_at: new Date().toISOString(), ...auditMetadata() }
-              }
-            : {
-                mode: "text",
-                content,
-                source_name: sourceName,
-                metadata: { entrypoint: "dashboard", submitted_at: new Date().toISOString(), ...auditMetadata() }
-              };
-      if (scanMode === "website") {
-        payload.metadata = { ...payload.metadata, ...auditMetadata() };
-      }
+      const { content: currentContent, projectFiles: currentFiles, scanMode: currentMode, sourceName: currentName, websiteUrl: currentUrl } = scanStateRef.current;
+      const metadata = {
+        client_session_id: clientSession,
+        submitted_at: new Date().toISOString(),
+        assessment_profile: scanOptions.profile || "complete",
+        request_rate: scanOptions.rate || "safe",
+        schedule: scanOptions.schedule || "now"
+      };
+      const payload = currentMode === "website"
+        ? { mode: "website", website_url: currentUrl, source_name: currentUrl || "website-scan", metadata: { ...metadata, entrypoint: "website-url" } }
+        : currentMode === "project-folder"
+          ? { mode: "project-folder", files: currentFiles, source_name: currentName || "uploaded-project", metadata: { ...metadata, entrypoint: "folder-upload" } }
+          : { mode: "text", content: currentContent, source_name: currentName, metadata: { ...metadata, entrypoint: "dashboard" } };
       const data = await createScan(payload);
       setResult(data);
       await refreshHistory();
-    } catch (err) {
-      setError(err.message);
+      navigate("dashboard");
+    } catch (scanError) {
+      setError(scanError.message);
     } finally {
       setLoading(false);
     }
-  }, [auditMetadata, refreshHistory]);
-
-  const startScanFromInput = useCallback(
-    (event) => {
-      const tagName = event.target?.tagName;
-      if (event.key !== "Enter" || !["INPUT", "TEXTAREA"].includes(tagName)) return;
-      if (tagName === "TEXTAREA" && event.shiftKey) return;
-      event.preventDefault();
-      scan();
-    },
-    [scan]
-  );
+  }, [clientSession, navigate, refreshHistory]);
 
   const handleFolderUpload = useCallback(async (event) => {
     const files = Array.from(event.target.files || []);
@@ -263,160 +150,60 @@ export default function App() {
         selectedBytes += file.size;
         return true;
       });
-    if (readableFiles.length < files.length) {
-      setError("Some binary or oversized files were skipped to keep the scan within safe resource limits.");
-    }
-    const loaded = await Promise.all(
-      readableFiles.map(async (file) => ({
-        path: file.webkitRelativePath || file.name,
-        size: file.size,
-        content: await file.text()
-      }))
-    );
+    if (readableFiles.length < files.length) setError("Some binary or oversized files were skipped to keep the scan within safe resource limits.");
+    const loaded = await Promise.all(readableFiles.map(async (file) => ({ path: file.webkitRelativePath || file.name, size: file.size, content: await file.text() })));
     setProjectFiles(loaded);
     setSourceName(files[0]?.webkitRelativePath?.split("/")[0] || "uploaded-project");
-    setContent(
-      loaded
-        .slice(0, 12)
-        .map((file) => `// ${file.path}\n${file.content.slice(0, 700)}`)
-        .join("\n\n")
-    );
+    setContent(loaded.slice(0, 12).map((file) => `// ${file.path}\n${file.content.slice(0, 700)}`).join("\n\n"));
   }, []);
 
   const loadScan = useCallback(async (id) => {
     setLoading(true);
-    try {
-      setResult(await getScan(id));
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    setError("");
+    try { setResult(await getScan(id)); }
+    catch (scanError) { setError(scanError.message); }
+    finally { setLoading(false); }
   }, []);
 
-  const filteredFindings = useMemo(() => {
-    if (!result?.findings) return [];
-    const needle = deferredFindingFilter.toLowerCase();
-    return result.findings.filter((item) =>
-      [item.secret_type, item.risk_level, item.rule_id, item.context_snippet, item.file_path, item.source_address]
-        .join(" ")
-        .toLowerCase()
-        .includes(needle)
-    );
-  }, [result, deferredFindingFilter]);
-
-  if (isAdminPath) return SERVERLESS_FEATURES_ENABLED ? <AdminDashboard /> : <UnavailableAdmin />;
-
+  const view = useMemo(() => {
+    const sharedScanProps = { content, error, handleFolderUpload, loading, onScan: scan, projectFiles, scanMode, setContent, setScanMode, setSourceName, setWebsiteUrl, sourceName, websiteUrl };
+    switch (activeView) {
+      case "scan": return <ScanView {...sharedScanProps} />;
+      case "history": return <HistoryView history={history} loadScan={loadScan} query={query} riskFilter={riskFilter} setQuery={setQuery} setRiskFilter={setRiskFilter} onNavigate={navigate} />;
+      case "assets": return <AssetsView result={result} />;
+      case "findings": return <FindingsView result={result} />;
+      case "cves": return <CveView result={result} />;
+      case "reports": return <ReportsView result={result} />;
+      case "integrations": return <IntegrationsView result={result} />;
+      case "settings": return <SettingsView theme={theme} onToggleTheme={toggleTheme} />;
+      case "help": return <HelpView />;
+      default: return <DashboardView history={history} onLoadScan={loadScan} onNavigate={navigate} result={result} />;
+    }
+  }, [activeView, content, error, handleFolderUpload, history, loadScan, loading, navigate, projectFiles, query, result, riskFilter, scan, scanMode, sourceName, theme, toggleTheme, websiteUrl]);
 
   return (
-    <main className="mission-shell min-h-screen overflow-hidden text-slate-100" onKeyDown={startScanFromInput}>
-      <div className="scanline" />
-      <div className="mx-auto flex max-w-[1500px] flex-col gap-6 px-4 py-5 sm:px-6 lg:px-10">
-        <MemoMissionHeader loading={loading} result={result} theme={theme} onToggleTheme={() => setTheme((value) => value === "dark" ? "light" : "dark")} />
-        <MemoHeroSection loading={loading} result={result} onScan={scan} onRefreshHistory={refreshHistory} />
-        <LiveScanProgress visible={loading && scanMode === "website"} />
-        <section className="ops-grid">
-          <MemoCommandPanel
-            content={content}
-            error={error}
-            handleFolderUpload={handleFolderUpload}
-            projectFiles={projectFiles}
-            scanMode={scanMode}
-            showExtendedModes={SERVERLESS_FEATURES_ENABLED}
-            setContent={setContent}
-            setSourceName={setSourceName}
-            setWebsiteUrl={setWebsiteUrl}
-            showFolderMode={showFolderMode}
-            showTextMode={showTextMode}
-            showWebsiteMode={showWebsiteMode}
-            sourceName={sourceName}
-            websiteUrl={websiteUrl}
-          />
-          <MemoHistoryPanel
-            history={history}
-            loadScan={loadScan}
-            query={query}
-            riskFilter={riskFilter}
-            setQuery={setQuery}
-            setRiskFilter={setRiskFilter}
-          />
-        </section>
-        <MemoAnalysisSection
-          key={result?.id || result?.content_hash || "empty-analysis"}
-          filteredFindings={filteredFindings}
-          findingFilter={findingFilter}
-          result={result}
-          setFindingFilter={setFindingFilter}
-        />
-        <Suspense fallback={<div className="mission-panel module-loading"><Loader2 className="h-5 w-5 animate-spin" /> Loading assessment modules...</div>}>
-          <AssessmentDashboard result={result} />
-          <KnowledgeBase />
-        </Suspense>
-      </div>
-    </main>
-  );
-}
-
-function MissionHeader({ loading, result, theme, onToggleTheme }) {
-  return (
-    <header className="mission-header">
-      <div className="flex items-center gap-3">
-        <div className="sigil">
-          <Fingerprint className="h-5 w-5" />
-        </div>
-        <div>
-          <div className="mono-label">LEAKSHIELD PRO // PUBLIC EXPOSURE AI</div>
-          <h1 className="text-xl font-semibold tracking-normal text-white sm:text-2xl">Orbital Secret Defense Console</h1>
-        </div>
-      </div>
-      <div className="header-actions">
-        <button type="button" className="theme-toggle" onClick={onToggleTheme} title={`Use ${theme === "dark" ? "light" : "dark"} mode`} aria-label={`Use ${theme === "dark" ? "light" : "dark"} mode`}>
-          {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-        </button>
-        {SERVERLESS_FEATURES_ENABLED && <AdminShortcut />}
-        <div className="hidden items-center gap-3 lg:flex">
-          <MemoTelemetryPill icon={Activity} label="Engine" value={loading ? "SCANNING" : "ARMED"} tone="green" />
-          <MemoTelemetryPill icon={ShieldAlert} label="Risk" value={result?.overall_level ?? "STANDBY"} tone="red" />
-        </div>
-      </div>
-    </header>
-  );
-}
-
-const MemoMissionHeader = memo(MissionHeader);
-
-function LiveScanProgress({ visible }) {
-  if (!visible) return null;
-  const phases = ["DNS", "SSL", "Headers", "Subdomains", "Crawling", "Technologies", "Analysis", "Advisor", "Report"];
-  return (
-    <section className="live-progress mission-panel" aria-live="polite">
-      <div><Loader2 className="h-5 w-5 animate-spin" /><span><strong>Assessment in progress</strong><small>Running bounded passive checks against public resources only.</small></span></div>
-      <ol>{phases.map((phase, index) => <li key={phase} style={{ "--progress-index": index }}><span />{phase}</li>)}</ol>
-    </section>
-  );
-}
-
-function AdminShortcut({ floating = false }) {
-  return (
-    <a className={`admin-shortcut${floating ? " admin-shortcut-floating" : ""}`} href="/admin" title="Open admin login">
-      <LockKeyhole className="h-4 w-4" />
-      Admin Login
-    </a>
+    <EnterpriseShell
+      activeView={activeView}
+      loading={loading}
+      mobileOpen={mobileOpen}
+      onMobileOpenChange={setMobileOpen}
+      onNavigate={navigate}
+      onToggleSidebar={toggleSidebar}
+      onToggleTheme={toggleTheme}
+      result={result}
+      sidebarCollapsed={sidebarCollapsed}
+      theme={theme}
+    >
+      {error && activeView !== "scan" && <div className="alert alert-error global-alert"><AlertTriangle /><span><strong>Action could not complete</strong>{error}</span></div>}
+      {view}
+    </EnterpriseShell>
   );
 }
 
 function UnavailableAdmin() {
   return (
-    <main className="mission-shell min-h-screen overflow-hidden text-slate-100">
-      <div className="scanline" />
-      <div className="admin-shell">
-        <section className="admin-login mission-panel">
-          <div className="classification"><LockKeyhole className="h-4 w-4" /> ADMIN DASHBOARD</div>
-          <h1>Not available in this deployment</h1>
-          <p className="empty-state">The Docker/FastAPI deployment supports text scanning. Admin audit tools run on the Vercel deployment.</p>
-          <a className="primary-command" href="/">Return to scanner</a>
-        </section>
-      </div>
+    <main className="auth-page">
+      <section className="auth-card panel"><BrandMark /><div className="auth-icon"><LockKeyhole /></div><h1>Admin tools unavailable</h1><p>This deployment does not include the serverless audit store. The public scanner remains available.</p><a className="primary-button" href="/">Return to scanner</a></section>
     </main>
   );
 }
@@ -431,798 +218,84 @@ function AdminDashboard() {
   const [selectedUserId, setSelectedUserId] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
   const selectedUser = users.find((user) => user.id === selectedUserId) || users[0];
-  const stats = useMemo(
-    () => ({
-      users: users.length,
-      scans: records.length,
-      findings: records.reduce((sum, record) => sum + (record.result_shown_to_user?.finding_count || 0), 0),
-      critical: records.filter((record) => record.result_shown_to_user?.overall_level === "CRITICAL").length,
-    }),
-    [records, users.length]
-  );
 
-  const loadAudit = useCallback(
-    async (activeToken = token) => {
-      if (!activeToken) return;
-      setLoading(true);
-      setError("");
-      try {
-        const data = await fetchAdminAudit(activeToken);
-        setRecords(data.records || []);
-        setUsers(data.users || []);
-        setStorage(data.storage || null);
-        setSelectedUserId((current) => current || data.users?.[0]?.id || "");
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    },
-    [token]
-  );
+  const loadAudit = useCallback(async (activeToken) => {
+    if (!activeToken) return;
+    setLoading(true);
+    setError("");
+    try {
+      const data = await fetchAdminAudit(activeToken);
+      setRecords(data.records || []);
+      setUsers(data.users || []);
+      setStorage(data.storage || null);
+      setSelectedUserId((current) => current || data.users?.[0]?.id || "");
+    } catch (auditError) { setError(auditError.message); }
+    finally { setLoading(false); }
+  }, []);
 
-  useEffect(() => {
-    loadAudit().catch(() => {});
-  }, [loadAudit]);
+  useEffect(() => { if (token) loadAudit(token); }, [loadAudit, token]);
 
   async function login(event) {
     event.preventDefault();
     setLoading(true);
     setError("");
-    try {
-      const session = await adminLogin(email, password);
-      setToken(session.token);
-      await loadAudit(session.token);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    try { const session = await adminLogin(email, password); setToken(session.token); }
+    catch (loginError) { setError(loginError.message); setLoading(false); }
   }
-
   async function clearRecords() {
-    setError("");
-    try {
-      await clearAdminAudit(token);
-      setRecords([]);
-      setUsers([]);
-      setSelectedUserId("");
-    } catch (err) {
-      setError(err.message);
-    }
+    if (!window.confirm("Clear all saved admin audit records? This cannot be undone.")) return;
+    try { await clearAdminAudit(token); setRecords([]); setUsers([]); setSelectedUserId(""); }
+    catch (clearError) { setError(clearError.message); }
   }
+  function logout() { adminLogout(); setToken(""); setRecords([]); setUsers([]); }
 
-  function logout() {
-    adminLogout();
-    setToken("");
-    setRecords([]);
-    setUsers([]);
-  }
+  if (!token) return (
+    <main className="auth-page">
+      <form className="auth-card panel" onSubmit={login}>
+        <BrandMark /><div className="auth-icon"><LockKeyhole /></div><span className="eyebrow">Restricted workspace</span><h1>Admin sign in</h1><p>Review redacted scan activity and workspace audit records.</p>
+        <label className="form-field"><span>Email address</span><input required autoComplete="username" type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
+        <label className="form-field"><span>Password</span><input required autoComplete="current-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
+        {error && <div className="alert alert-error"><AlertTriangle /><span>{error}</span></div>}
+        <button className="primary-button primary-button-large" disabled={loading}>{loading ? <Loader2 className="spin" /> : <LockKeyhole />} Sign in securely</button>
+        <a className="text-button" href="/">Return to public scanner</a>
+      </form>
+    </main>
+  );
 
-  if (!token) {
-    return (
-      <main className="mission-shell min-h-screen overflow-hidden text-slate-100">
-        <div className="scanline" />
-        <div className="admin-shell">
-          <form onSubmit={login} className="admin-login mission-panel">
-            <div className="classification">
-              <LockKeyhole className="h-4 w-4" />
-              ADMIN DASHBOARD
-            </div>
-            <h1>Admin Login</h1>
-            <label className="field-block">
-              <span>Email</span>
-              <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" />
-            </label>
-            <label className="field-block">
-              <span>Password</span>
-              <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" />
-            </label>
-            {error && <div className="error-band">{error}</div>}
-            <button disabled={loading} className="primary-command" title="Login">
-              {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <LockKeyhole className="h-5 w-5" />}
-              Login
-            </button>
-          </form>
-        </div>
-      </main>
-    );
-  }
-
+  const stats = {
+    users: users.length,
+    scans: records.length,
+    findings: records.reduce((sum, record) => sum + (record.result_shown_to_user?.finding_count || 0), 0),
+    critical: records.filter((record) => record.result_shown_to_user?.overall_level === "CRITICAL").length
+  };
   return (
-    <main className="mission-shell min-h-screen overflow-hidden text-slate-100">
-      <div className="scanline" />
-      <div className="admin-shell">
-        <header className="mission-header">
-          <div className="flex items-center gap-3">
-            <div className="sigil">
-              <ShieldCheck className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="mono-label">LEAKSHIELD PRO // ADMIN AUDIT</div>
-              <h1 className="text-xl font-semibold tracking-normal text-white sm:text-2xl">Security Review Dashboard</h1>
-            </div>
-          </div>
-          <div className="admin-actions">
-            <button onClick={() => loadAudit()} className="secondary-command" title="Refresh audit">
-              <RefreshCw className="h-5 w-5" />
-              Refresh
-            </button>
-            <button onClick={clearRecords} className="secondary-command" title="Clear saved audit database">
-              Clear
-            </button>
-            <button onClick={logout} className="secondary-command" title="Logout">
-              Logout
-            </button>
-          </div>
-        </header>
-
-        <section className="admin-stat-grid">
-          <Metric label="Users" value={stats.users} />
-          <Metric label="Scans" value={stats.scans} />
-          <Metric label="Findings" value={stats.findings} />
-          <Metric label="Critical" value={stats.critical} />
-        </section>
-
-        {storage && (
-          <div className="storage-band">
-            <Database className="h-4 w-4" />
-            <span>{storage.provider === "vercel_blob_private" ? "Private Vercel Blob database active" : "Memory fallback active"}</span>
-            <strong>{storage.grouping}</strong>
-          </div>
-        )}
-
-        {error && <div className="error-band">{error}</div>}
-
+    <main className="admin-page">
+      <header className="admin-topbar"><BrandMark /><div><button className="secondary-button" onClick={() => loadAudit(token)}><RefreshCw /> Refresh</button><button className="danger-button" onClick={clearRecords}><Trash2 /> Clear audit</button><button className="secondary-button" onClick={logout}>Sign out</button></div></header>
+      <div className="admin-content">
+        <header className="page-heading"><div><p>LeakShield Pro</p><h1>Security Review Dashboard</h1><span>Redacted user activity and assessment audit records.</span></div></header>
+        <section className="metric-grid"><AdminMetric label="Users" value={stats.users} /><AdminMetric label="Scans" value={stats.scans} /><AdminMetric label="Findings" value={stats.findings} /><AdminMetric label="Critical scans" value={stats.critical} /></section>
+        {storage && <div className="notice"><Database /><div><strong>{storage.provider === "vercel_blob_private" ? "Private Vercel Blob audit store" : "Memory audit store"}</strong><p>{storage.grouping}</p></div></div>}
+        {error && <div className="alert alert-error"><AlertTriangle /><span>{error}</span></div>}
         <section className="admin-grid">
-          <aside className="mission-panel">
-            <MemoPanelHeader icon={History} title="User Audit Boxes" code="ADMIN-01" />
-            <div className="history-list admin-records">
-              {users.map((user) => (
-                <button key={user.id} onClick={() => setSelectedUserId(user.id)} className="history-item user-box-button">
-                  <span className="truncate text-sm font-semibold text-white">{user.id}</span>
-                  <span className={`risk-badge ${levels[user.latest_risk] || levels.LOW}`}>
-                    {user.latest_risk || "LOW"}
-                  </span>
-                  <small>{user.scan_count} scans | {user.finding_count} findings | redacted audit</small>
-                  <small>{user.session_id}</small>
-                  <small>Latest: {new Date(user.latest_seen_at).toLocaleString()}</small>
-                </button>
-              ))}
-              {!users.length && <p className="empty-state">{loading ? "Loading user boxes..." : "No user audit boxes are available."}</p>}
-            </div>
-          </aside>
-
-          <AuditUserBox user={selectedUser} />
+          <aside className="panel admin-users"><h2>User audit boxes</h2>{users.map((user) => <button className={selectedUser?.id === user.id ? "active" : ""} key={user.id} onClick={() => setSelectedUserId(user.id)}><span><strong>{user.id}</strong><small>{user.scan_count} scans · {user.finding_count} findings</small></span><SeverityBadge level={user.latest_risk || "LOW"} /></button>)}{!users.length && <p>{loading ? "Loading user records..." : "No audit records are available."}</p>}</aside>
+          <AuditUserDetails user={selectedUser} />
         </section>
       </div>
     </main>
   );
 }
 
-function AuditUserBox({ user }) {
-  if (!user) {
-    return (
-      <section className="mission-panel">
-        <MemoPanelHeader icon={KeyRound} title="User Data Box" code="ADMIN-02" />
-        <p className="empty-state">Select a user box to review redacted scan summaries and session activity.</p>
-      </section>
-    );
-  }
+function AdminMetric({ label, value }) { return <article className="metric-card metric-blue"><div className="metric-icon"><ShieldCheck /></div><div><span>{label}</span><strong>{value}</strong><small>Redacted audit data</small></div></article>; }
 
-  const latest = user.records?.[0] || {};
-
+function AuditUserDetails({ user }) {
+  if (!user) return <section className="panel admin-detail-empty"><ShieldCheck /><h2>Select a user audit box</h2><p>Review saved, redacted request and result summaries.</p></section>;
   return (
-    <section className="mission-panel admin-detail">
-      <MemoPanelHeader icon={KeyRound} title="User Data Box" code="ADMIN-02" />
-      <div className="audit-detail-grid">
-        <Metric label="User" value={user.id} />
-        <Metric label="Scans" value={user.scan_count || 0} />
-        <Metric label="Findings" value={user.finding_count || 0} />
-        <Metric label="Session" value={user.session_id || "anonymous"} />
-      </div>
-
-      <h3>User Row Summary</h3>
-      <pre className="audit-json">{JSON.stringify({
-        user_id: user.id,
-        session_id: user.session_id,
-        first_seen_at: user.first_seen_at,
-        latest_seen_at: user.latest_seen_at,
-        scan_count: user.scan_count,
-        finding_count: user.finding_count,
-        critical_count: user.critical_count,
-        latest_risk: user.latest_risk,
-        latest_request_context: latest.request_context,
-      }, null, 2)}</pre>
-
-      <h3>Complete Saved Data</h3>
-      <div className="user-record-stack">
-        {(user.records || []).map((record) => {
-          const result = record.result_shown_to_user || {};
-          return (
-            <article key={record.id} className="user-record-box">
-              <div className="user-record-head">
-                <strong>{record.submitted_input?.source_name || record.submitted_input?.website_url || "scan"}</strong>
-                <span className={`risk-badge ${levels[result.overall_level] || levels.LOW}`}>{result.overall_level || "LOW"}</span>
-                <small>{new Date(record.created_at).toLocaleString()}</small>
-              </div>
-              <pre className="audit-json">{JSON.stringify({
-                record_id: record.id,
-                storage_path: record.storage_path,
-                consent: record.consent,
-                request_context: record.request_context,
-                submitted_input: record.submitted_input,
-                result_shown_to_user: {
-                  id: result.id,
-                  source_name: result.source_name,
-                  overall_score: result.overall_score,
-                  overall_level: result.overall_level,
-                  finding_count: result.finding_count,
-                  public_exposure_count: result.public_exposure_count,
-                  scanned_addresses: result.scanned_addresses,
-                  recommendation: result.recommendation,
-                  findings: result.findings || []
-                }
-              }, null, 2)}</pre>
-            </article>
-          );
-        })}
-      </div>
+    <section className="panel admin-detail">
+      <header><span className="eyebrow">User data box</span><h2>{user.id}</h2><p>{user.session_id}</p></header>
+      <dl className="admin-user-stats"><div><dt>Scans</dt><dd>{user.scan_count}</dd></div><div><dt>Findings</dt><dd>{user.finding_count}</dd></div><div><dt>Critical</dt><dd>{user.critical_count}</dd></div><div><dt>Latest risk</dt><dd><SeverityBadge level={user.latest_risk || "LOW"} /></dd></div></dl>
+      <h3>Saved scan activity</h3>
+      <div className="audit-records">{(user.records || []).map((record) => { const result = record.result_shown_to_user || {}; return <details key={record.id}><summary><span><strong>{record.submitted_input?.source_name || record.submitted_input?.website_url || "Scan"}</strong><small>{new Date(record.created_at).toLocaleString()}</small></span><SeverityBadge level={result.overall_level || "LOW"} /></summary><pre>{JSON.stringify({ record_id: record.id, request_context: record.request_context, submitted_input: record.submitted_input, result_shown_to_user: result }, null, 2)}</pre></details>; })}</div>
     </section>
   );
-}
-
-function HeroSection({ loading, result, onScan, onRefreshHistory }) {
-  return (
-    <section className="hero-grid">
-      <div className="hero-copy">
-        <div className="classification">
-          <LockKeyhole className="h-4 w-4" />
-          CLASSIFIED-GRADE DEVSECOPS ANALYSIS
-        </div>
-        <h2 className="hero-title">
-          Expose every leak
-          <span> before launch.</span>
-        </h2>
-        <p className="hero-subtitle">
-          Upload a project, inspect a public website, or paste sensitive code. LeakShield maps exposed secrets to exact
-          file and URL addresses, scores operational risk, and returns a mission-ready remediation plan.
-        </p>
-        <div className="mission-actions">
-          <button onClick={onScan} disabled={loading} className="primary-command" title="Run scan">
-            {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <ScanLine className="h-5 w-5" />}
-            Initiate Exposure Sweep
-          </button>
-          <button onClick={onRefreshHistory} className="secondary-command" title="Refresh history">
-            <RefreshCw className="h-5 w-5" />
-            Sync Console
-          </button>
-        </div>
-      </div>
-
-      <div className="orbit-stage">
-        <MemoOrbitSphere result={result} loading={loading} />
-        <div className="floating-card floating-card-a">
-          <div className="mono-label text-cyan-200">ACTIVE SCAN</div>
-          <strong>{result?.source_name ?? "No target locked"}</strong>
-          <span>{result ? `${result.scanned_files ?? 1} file/address unit(s) inspected` : "Awaiting scan vector"}</span>
-        </div>
-        <div className="floating-card floating-card-b">
-          <div className="mono-label text-rose-200">VERDICT</div>
-          <strong>{result ? `${result.overall_score}/100 ${result.overall_level}` : "0/100 STANDBY"}</strong>
-          <span>{result?.finding_count ?? 0} exposure signal(s) isolated</span>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-const MemoHeroSection = memo(HeroSection);
-
-function CommandPanel({
-  content,
-  error,
-  handleFolderUpload,
-  projectFiles,
-  scanMode,
-  setContent,
-  setSourceName,
-  setWebsiteUrl,
-  showFolderMode,
-  showExtendedModes,
-  showTextMode,
-  showWebsiteMode,
-  sourceName,
-  websiteUrl
-}) {
-  return (
-    <div className="mission-panel command-panel">
-      <MemoPanelHeader icon={Cpu} title="Threat Acquisition" code="INPUT-01" />
-      <div className="mode-rail">
-        <MemoModeButton active={scanMode === "text"} onClick={showTextMode} icon={TerminalSquare} label="Text" />
-        {showExtendedModes && <MemoModeButton active={scanMode === "project-folder"} onClick={showFolderMode} icon={FolderOpen} label="Folder" />}
-        {showExtendedModes && <MemoModeButton active={scanMode === "website"} onClick={showWebsiteMode} icon={Globe2} label="Website" />}
-      </div>
-
-      <div className="target-row">
-        <label className="field-block">
-          <span>Target Name</span>
-          <input value={sourceName} onChange={(event) => setSourceName(event.target.value)} aria-label="Source name" />
-        </label>
-        {scanMode === "project-folder" && (
-          <label className="upload-command">
-            <UploadCloud className="h-5 w-5" />
-            Upload Project Folder
-            <input type="file" className="hidden" multiple webkitdirectory="" directory="" onChange={handleFolderUpload} />
-            <small>{projectFiles.length ? `${projectFiles.length} files loaded` : "Select a source tree"}</small>
-          </label>
-        )}
-        {scanMode === "website" && (
-          <label className="field-block grow">
-            <span>Public Website Link</span>
-            <div className="field-with-icon">
-              <Link2 className="h-4 w-4" />
-              <input
-                value={websiteUrl}
-                onChange={(event) => setWebsiteUrl(event.target.value)}
-                placeholder="https://example.com"
-                aria-label="Website URL"
-              />
-            </div>
-          </label>
-        )}
-      </div>
-
-      <div className="editor-shell">
-        <div className="editor-toolbar">
-          <span>{scanMode === "website" ? "REMOTE ASSET FETCH" : scanMode === "project-folder" ? "PROJECT PREVIEW" : "RAW INPUT"}</span>
-          <span>{scanMode === "project-folder" ? `${projectFiles.length} files` : `${content.length} chars`}</span>
-        </div>
-        <textarea
-          value={content}
-          onChange={(event) => setContent(event.target.value)}
-          readOnly={scanMode === "website"}
-          spellCheck={false}
-          placeholder={scanMode === "website" ? "Enter a website URL above. LeakShield will fetch public HTML and linked assets." : ""}
-        />
-      </div>
-      {error && <div className="error-band">{error}</div>}
-    </div>
-  );
-}
-
-const MemoCommandPanel = memo(CommandPanel);
-
-function HistoryPanel({ history, loadScan, query, riskFilter, setQuery, setRiskFilter }) {
-  return (
-    <aside className="mission-panel">
-      <MemoPanelHeader icon={History} title="Mission Archive" code="HIST-07" />
-      <div className="history-filters">
-        <div className="field-with-icon">
-          <Search className="h-4 w-4" />
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search source" />
-        </div>
-        <select value={riskFilter} onChange={(event) => setRiskFilter(event.target.value)} aria-label="Risk filter">
-          <option value="">All</option>
-          <option>LOW</option>
-          <option>MEDIUM</option>
-          <option>HIGH</option>
-          <option>CRITICAL</option>
-        </select>
-      </div>
-      <div className="history-list">
-        {history.map((item) => (
-          <button key={item.id} onClick={() => loadScan(item.id)} className="history-item">
-            <span className="truncate text-sm font-semibold text-white">{item.source_name}</span>
-            <span className={`risk-badge ${levels[item.overall_level]}`}>{item.overall_level}</span>
-            <small>{item.finding_count} finding(s)</small>
-            <small>{new Date(item.created_at).toLocaleString()}</small>
-          </button>
-        ))}
-        {!history.length && <p className="empty-state">No archived scans match the current filters.</p>}
-      </div>
-    </aside>
-  );
-}
-
-const MemoHistoryPanel = memo(HistoryPanel);
-
-function AnalysisSection({ filteredFindings, findingFilter, result, setFindingFilter }) {
-  const [openGroup, setOpenGroup] = useState(null);
-  const findingGroups = useMemo(() => {
-    const grouped = filteredFindings.reduce((groups, finding) => {
-      const groupId = findingGroupId(finding);
-      groups[groupId] = [...(groups[groupId] || []), finding];
-      return groups;
-    }, {});
-    return findingGroupDefinitions
-      .map((definition) => {
-        const findings = grouped[definition.id] || [];
-        const highestSeverity = findings.reduce(
-          (highest, finding) =>
-            severityOrder[finding.risk_level] > severityOrder[highest] ? finding.risk_level : highest,
-          "LOW"
-        );
-        const severitySummary = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
-          .map((severity) => {
-            const count = findings.filter((finding) => finding.risk_level === severity).length;
-            return count ? `${count} ${severity.toLowerCase()}` : null;
-          })
-          .filter(Boolean)
-          .join(" / ");
-        return { ...definition, findings, highestSeverity, severitySummary };
-      })
-      .filter((group) => group.findings.length);
-  }, [filteredFindings]);
-
-  return (
-    <section className="analysis-grid">
-      <MemoRiskPanel result={result} />
-      <div className="mission-panel">
-        <div className="flex flex-col gap-3 border-b border-white/10 pb-4 sm:flex-row sm:items-center sm:justify-between">
-          <MemoPanelHeader icon={KeyRound} title="Exposure Findings" code="INTEL-22" compact />
-          <div className="field-with-icon max-w-sm">
-            <Filter className="h-4 w-4" />
-            <input value={findingFilter} onChange={(event) => setFindingFilter(event.target.value)} placeholder="Filter findings" />
-          </div>
-        </div>
-        <div className="finding-grid">
-          {result?.recommendation && <MemoRecommendationCard recommendation={result.recommendation} />}
-          {findingGroups.map((group) => {
-            const expanded = openGroup === group.id;
-            return (
-              <section className={`finding-group ${expanded ? "finding-group-open" : ""}`} key={group.id}>
-                <button
-                  type="button"
-                  className="finding-group-banner"
-                  aria-expanded={expanded}
-                  aria-controls={`finding-group-${group.id}`}
-                  onClick={() => setOpenGroup((current) => current === group.id ? null : group.id)}
-                >
-                  <span className="finding-group-code">{group.code}</span>
-                  <span className="finding-group-copy">
-                    <strong>{group.title}</strong>
-                    <small>{group.description}</small>
-                  </span>
-                  <span className="finding-group-summary">
-                    <b>{group.findings.length} issue{group.findings.length === 1 ? "" : "s"}</b>
-                    <small>{group.severitySummary}</small>
-                  </span>
-                  <span className={`risk-badge ${levels[group.highestSeverity]}`}>{group.highestSeverity}</span>
-                  <ChevronDown className="finding-group-chevron h-5 w-5" />
-                </button>
-                <div className="finding-group-body" id={`finding-group-${group.id}`} hidden={!expanded}>
-                  {group.findings.map((finding) => (
-                    <MemoFindingCard key={`${finding.rule_id}-${finding.line_number}-${finding.column_start}-${finding.file_path || finding.source_address}`} finding={finding} />
-                  ))}
-                </div>
-              </section>
-            );
-          })}
-          {!filteredFindings.length && (
-            <div className="empty-state col-span-full">
-              {result?.findings?.length ? "No findings match this filter." : "Run a scan to populate the forensic evidence deck."}
-            </div>
-          )}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-const MemoAnalysisSection = memo(AnalysisSection);
-
-function PanelHeader({ icon: Icon, title, code, compact = false }) {
-  return (
-    <div className={`panel-header ${compact ? "mb-0" : ""}`}>
-      <div className="panel-icon">
-        <Icon className="h-5 w-5" />
-      </div>
-      <div>
-        <div className="mono-label">{code}</div>
-        <h3>{title}</h3>
-      </div>
-    </div>
-  );
-}
-
-function TelemetryPill({ icon: Icon, label, value, tone }) {
-  return (
-    <div className={`telemetry-pill telemetry-${tone}`}>
-      <Icon className="h-4 w-4" />
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-const MemoPanelHeader = memo(PanelHeader);
-const MemoTelemetryPill = memo(TelemetryPill);
-
-function ModeButton({ active, onClick, icon: Icon, label }) {
-  return (
-    <button type="button" onClick={onClick} className={`mode-button ${active ? "mode-button-active" : ""}`}>
-      <Icon className="h-4 w-4" />
-      {label}
-    </button>
-  );
-}
-
-const MemoModeButton = memo(ModeButton);
-
-function OrbitSphere({ result, loading }) {
-  const level = result?.overall_level ?? "LOW";
-  const color = riskColor(level);
-  return (
-    <div className={`orbit-sphere ${loading ? "orbit-sphere-hot" : ""}`} style={{ "--orbit-color": color }}>
-      <div className="deep-halo" />
-      <div className="sphere-core" />
-      <div className="wireframe-shell">
-        {orbitMeridianNodes}
-        {orbitLatitudeNodes}
-        <span className="mesh-layer mesh-layer-a" />
-        <span className="mesh-layer mesh-layer-b" />
-        <span className="mesh-layer mesh-layer-c" />
-      </div>
-      <div className="orbit-ring orbit-ring-a" />
-      <div className="orbit-ring orbit-ring-b" />
-      <div className="orbit-ring orbit-ring-c" />
-      <div className="orbit-ring orbit-ring-d" />
-      <div className="radar-sweep" />
-      <div className="equator-beam" />
-      <div className="core-aperture" />
-      <div className="satellite-field">
-        {orbitSatelliteNodes}
-      </div>
-    </div>
-  );
-}
-
-const MemoOrbitSphere = memo(OrbitSphere);
-
-function RiskPanel({ result }) {
-  const score = result?.overall_score ?? 0;
-  const level = result?.overall_level ?? "LOW";
-  return (
-    <div className="mission-panel risk-panel">
-      <PanelHeader icon={Gauge} title="Risk Reactor" code="CORE-03" />
-      <div className="risk-reactor" style={{ "--risk-score": score, "--risk-color": riskColor(level) }}>
-        <div className="risk-inner">
-          <span>{score}</span>
-          <strong>{level}</strong>
-        </div>
-      </div>
-      <div className="metric-grid">
-        <MemoMetric label="Findings" value={result?.finding_count ?? 0} />
-        <MemoMetric label="Public" value={result?.public_exposure_count ?? 0} />
-        <MemoMetric label="Files" value={result?.scanned_files ?? 0} />
-        <MemoMetric label="URLs" value={result?.scanned_addresses?.length ?? 0} />
-        <MemoMetric label="Hash" value={result?.content_hash ? result.content_hash.slice(0, 8) : "pending"} />
-      </div>
-    </div>
-  );
-}
-
-const MemoRiskPanel = memo(RiskPanel);
-
-function Metric({ label, value }) {
-  return (
-    <div className="metric-tile">
-      <small>{label}</small>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-const MemoMetric = memo(Metric);
-
-function RecommendationCard({ recommendation }) {
-  return (
-    <article className="recommendation-card">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="mono-label text-cyan-200">REMEDIATION VECTOR</div>
-          <h3>Recommended Fix Plan</h3>
-        </div>
-        <span className={`risk-badge ${levels[recommendation.priority] || levels.LOW}`}>{recommendation.priority}</span>
-      </div>
-      <p>{recommendation.summary}</p>
-      {recommendation.exposed_addresses?.length > 0 && (
-        <div className="address-deck">
-          {[...new Set(recommendation.exposed_addresses)].map((address) => (
-            <code key={address}>{address}</code>
-          ))}
-        </div>
-      )}
-      <div className="action-stack">
-        {recommendation.actions.map((action) => (
-          <div key={action} className="action-row">
-            <Zap className="h-4 w-4" />
-            <span>{action}</span>
-          </div>
-        ))}
-      </div>
-    </article>
-  );
-}
-
-const MemoRecommendationCard = memo(RecommendationCard);
-
-function FindingCard({ finding }) {
-  const address = finding.file_path || finding.source_address || finding.source_name;
-  const learning = finding.explanation.learning;
-  const fixes = finding.explanation.developer_fixes;
-  const hasSourceCoordinates =
-    Boolean(finding.file_path) ||
-    ["response_body", "html_form"].includes(finding.location_type) ||
-    (!finding.source_address && finding.line_number > 0);
-  const locationLabels = {
-    http_response_header: "HTTP response header",
-    tls_endpoint: "TLS endpoint",
-    tls_certificate: "TLS certificate",
-    dns_record: "DNS record",
-    public_url: "Public URL",
-    response_body: "Response body",
-    html_form: "HTML form",
-    network_port: "Network port",
-    software_version: "Software version",
-    project_file: "Project file",
-    pasted_text: "Pasted text",
-    configuration: "Configuration"
-  };
-  const locationLabel = locationLabels[finding.location_type] || (hasSourceCoordinates ? "Source code" : "Remote configuration");
-  const observedEvidence =
-    finding.observed_evidence ||
-    (hasSourceCoordinates ? finding.context_snippet : finding.explanation.summary);
-  const expectedValue = finding.expected_value || finding.explanation.remediation;
-  return (
-    <article className="finding-card">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="mono-label">{finding.rule_id}</div>
-          <h3>{finding.secret_type}</h3>
-          <p className="font-mono text-xs text-slate-400">{finding.value_preview}</p>
-        </div>
-        <span className={`risk-badge ${levels[finding.risk_level]}`}>{finding.risk_level}</span>
-      </div>
-      <div className="finding-metrics">
-        <span>{hasSourceCoordinates ? `Line ${finding.line_number}` : locationLabel}</span>
-        <span>Score {finding.risk_score}</span>
-        <span>{finding.confidence ? `${Math.round(finding.confidence * 100)}% conf` : finding.severity}</span>
-        {finding.verification_status && <span>{finding.verification_status}</span>}
-      </div>
-      {address && (
-        <div className="address-panel">
-          <div className="flex items-center gap-2 text-xs uppercase text-slate-500">
-            <FileCode2 className="h-3.5 w-3.5" />
-            {hasSourceCoordinates ? "Exact source location" : "Affected public location"}
-          </div>
-          <code>
-            {hasSourceCoordinates ? `${address}:${finding.line_number}:${finding.column_start}` : address}
-          </code>
-          {finding.public_accessible && <span>Publicly accessible surface confirmed</span>}
-          {!hasSourceCoordinates && (
-            <span>Remote configuration finding. A public scan can identify the affected control, but not the private server source file that defines it.</span>
-          )}
-        </div>
-      )}
-      <div className="evidence-panel">
-        <div className="flex items-center gap-2 text-xs uppercase text-slate-500">
-          <Fingerprint className="h-3.5 w-3.5" />
-          Technical evidence
-        </div>
-        <dl className="evidence-grid">
-          <div>
-            <dt>Affected component</dt>
-            <dd>{finding.affected_component || finding.secret_type}</dd>
-          </div>
-          <div>
-            <dt>Observed by LeakShield</dt>
-            <dd>{observedEvidence}</dd>
-          </div>
-          <div>
-            <dt>Expected secure state</dt>
-            <dd><code>{expectedValue}</code></dd>
-          </div>
-          {finding.detection_method && (
-            <div>
-              <dt>How it was verified</dt>
-              <dd>{finding.detection_method}</dd>
-            </div>
-          )}
-          <div>
-            <dt>Finding fingerprint</dt>
-            <dd><code>SHA-256 {finding.value_hash}</code></dd>
-          </div>
-          {finding.external_reference && (
-            <div>
-              <dt>Official advisory</dt>
-              <dd><a href={finding.external_reference} target="_blank" rel="noreferrer">{finding.cve || finding.external_reference}</a></dd>
-            </div>
-          )}
-          {hasSourceCoordinates && finding.context_snippet && (
-            <div>
-              <dt>Redacted source context</dt>
-              <dd><code>{finding.context_snippet}</code></dd>
-            </div>
-          )}
-        </dl>
-      </div>
-      <p className="mt-4 text-sm text-slate-200">{finding.explanation.summary}</p>
-      <div className="impact-box">
-        <div className="flex items-center gap-2 text-xs uppercase text-slate-500">
-          <Database className="h-3.5 w-3.5" />
-          Impact
-        </div>
-        <p>{finding.explanation.attacker_impact}</p>
-      </div>
-      <p className="mt-3 text-xs leading-5 text-slate-500">{finding.explanation.remediation}</p>
-      {(finding.owasp || finding.cwe || finding.capec) && (
-        <div className="mapping-row">
-          {finding.owasp && <span>{finding.owasp}</span>}
-          {finding.cwe && <span>{finding.cwe}</span>}
-          {finding.capec && <span>{finding.capec}</span>}
-        </div>
-      )}
-      {learning && (
-        <details className="learning-mode">
-          <summary><ShieldCheck className="h-4 w-4" /> Learning Mode: understand and fix this finding</summary>
-          <div className="learning-grid">
-            <LearningBlock title="What is it?" value={learning.definition} />
-            <LearningBlock title="Why dangerous?" value={learning.why_dangerous} />
-            <LearningBlock title="How attackers use it" value={learning.attacker_method} />
-            <LearningBlock title="Generalized example" value={learning.real_world_example} />
-            <LearningBlock title="Business impact" value={learning.business_impact} />
-          </div>
-          <LearningList title="Common mistakes" items={learning.common_mistakes} />
-          <LearningList title="Step-by-step remediation" items={learning.remediation_steps} ordered />
-          <LearningList title="Prevention checklist" items={learning.prevention_checklist} />
-          {fixes && (
-            <div className="fix-assistant">
-              <h4>Developer Fix Assistant</h4>
-              <p>{fixes.generic}</p>
-              <div className="snippet-grid">
-                {Object.entries(fixes.snippets || {}).map(([framework, snippet]) => <div key={framework}><strong>{framework}</strong><pre>{snippet}</pre></div>)}
-              </div>
-            </div>
-          )}
-          <div className="official-references">
-            {(learning.references || []).map((reference) => {
-              const url = safeOfficialReference(reference.url);
-              return url ? <a key={url} href={url} target="_blank" rel="noreferrer">{reference.title}</a> : null;
-            })}
-          </div>
-        </details>
-      )}
-    </article>
-  );
-}
-
-function LearningBlock({ title, value }) {
-  return <div><strong>{title}</strong><p>{value}</p></div>;
-}
-
-function LearningList({ title, items = [], ordered = false }) {
-  const List = ordered ? "ol" : "ul";
-  return <div className="learning-list"><strong>{title}</strong><List>{items.map((item) => <li key={item}>{item}</li>)}</List></div>;
-}
-
-const MemoFindingCard = memo(FindingCard);
-
-function safeOfficialReference(value) {
-  try {
-    const url = new URL(value);
-    const allowedHosts = new Set([
-      "cheatsheetseries.owasp.org",
-      "developer.mozilla.org",
-      "cwe.mitre.org",
-      "owasp.org",
-      "www.rfc-editor.org"
-    ]);
-    return url.protocol === "https:" && allowedHosts.has(url.hostname) ? url.toString() : "";
-  } catch {
-    return "";
-  }
 }
