@@ -2,6 +2,7 @@ import { lazy, memo, Suspense, useCallback, useDeferredValue, useEffect, useMemo
 import {
   Activity,
   AlertTriangle,
+  ChevronDown,
   Cpu,
   Database,
   FileCode2,
@@ -57,6 +58,59 @@ const levels = {
   HIGH: "text-orange-200 border-orange-300/40 bg-orange-300/10",
   CRITICAL: "text-rose-200 border-rose-300/50 bg-rose-400/10"
 };
+
+const findingGroupDefinitions = [
+  { id: "application", title: "Application Security", code: "APP", description: "SQL, XSS, CSRF, redirects, authentication forms, and upload surfaces" },
+  { id: "headers", title: "Security Headers", code: "HDR", description: "Missing or weak browser protection and information-bearing response headers" },
+  { id: "browser", title: "Cookies & CORS", code: "WEB", description: "Session-cookie attributes and cross-origin access policy" },
+  { id: "transport", title: "SSL / TLS", code: "TLS", description: "Certificate validity, expiry, protocol, and cipher configuration" },
+  { id: "network", title: "Network & DNS", code: "NET", description: "Public ports, DNS records, and email-domain protection" },
+  { id: "exposure", title: "Public Exposure", code: "EXP", description: "Sensitive files, backups, diagnostics, admin routes, and directory indexes" },
+  { id: "cves", title: "Known CVEs", code: "CVE", description: "Official NVD matches for explicitly detected software versions" },
+  { id: "secrets", title: "Secrets & Credentials", code: "KEY", description: "Potential API keys, tokens, private keys, passwords, and connection strings" },
+  { id: "other", title: "Other Findings", code: "ETC", description: "Additional evidence that does not fit another security family" }
+];
+
+const severityOrder = { LOW: 1, MEDIUM: 2, HIGH: 3, CRITICAL: 4 };
+
+function findingGroupId(finding) {
+  const rule = (finding.rule_id || "").toLowerCase();
+  const location = finding.location_type || "";
+  if (rule.startsWith("nvd-")) return "cves";
+  if (rule.startsWith("weak-cookie-") || rule.startsWith("cors-")) return "browser";
+  if (location.startsWith("tls_") || rule.includes("transport-security") || rule.includes("certificate")) return "transport";
+  if (location === "dns_record" || rule === "missing-dmarc" || rule.startsWith("exposed-port-")) return "network";
+  if (
+    rule.includes("sql-") ||
+    rule.includes("xss") ||
+    rule.includes("csrf") ||
+    rule.includes("redirect") ||
+    rule.includes("file-upload") ||
+    rule.includes("password-form")
+  ) return "application";
+  if (
+    location === "http_response_header" ||
+    rule.startsWith("missing-") ||
+    rule.startsWith("weak-csp-") ||
+    rule.startsWith("weak-hsts-") ||
+    rule.startsWith("weak-security-header-") ||
+    rule.includes("clickjacking") ||
+    rule.startsWith("version-disclosure-")
+  ) return "headers";
+  if (
+    location === "public_url" ||
+    rule.startsWith("public-") ||
+    rule === "directory-listing" ||
+    rule === "debug-stack-trace"
+  ) return "exposure";
+  if (
+    location === "project_file" ||
+    location === "pasted_text" ||
+    location === "response_body" ||
+    finding.secret_type?.toLowerCase().includes("potential")
+  ) return "secrets";
+  return "other";
+}
 
 const orbitSatellites = Array.from({ length: 26 }, (_, index) => index);
 const orbitMeridians = Array.from({ length: 14 }, (_, index) => index);
@@ -288,6 +342,7 @@ export default function App() {
           />
         </section>
         <MemoAnalysisSection
+          key={result?.id || result?.content_hash || "empty-analysis"}
           filteredFindings={filteredFindings}
           findingFilter={findingFilter}
           result={result}
@@ -775,6 +830,33 @@ function HistoryPanel({ history, loadScan, query, riskFilter, setQuery, setRiskF
 const MemoHistoryPanel = memo(HistoryPanel);
 
 function AnalysisSection({ filteredFindings, findingFilter, result, setFindingFilter }) {
+  const [openGroup, setOpenGroup] = useState(null);
+  const findingGroups = useMemo(() => {
+    const grouped = filteredFindings.reduce((groups, finding) => {
+      const groupId = findingGroupId(finding);
+      groups[groupId] = [...(groups[groupId] || []), finding];
+      return groups;
+    }, {});
+    return findingGroupDefinitions
+      .map((definition) => {
+        const findings = grouped[definition.id] || [];
+        const highestSeverity = findings.reduce(
+          (highest, finding) =>
+            severityOrder[finding.risk_level] > severityOrder[highest] ? finding.risk_level : highest,
+          "LOW"
+        );
+        const severitySummary = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
+          .map((severity) => {
+            const count = findings.filter((finding) => finding.risk_level === severity).length;
+            return count ? `${count} ${severity.toLowerCase()}` : null;
+          })
+          .filter(Boolean)
+          .join(" / ");
+        return { ...definition, findings, highestSeverity, severitySummary };
+      })
+      .filter((group) => group.findings.length);
+  }, [filteredFindings]);
+
   return (
     <section className="analysis-grid">
       <MemoRiskPanel result={result} />
@@ -788,10 +870,42 @@ function AnalysisSection({ filteredFindings, findingFilter, result, setFindingFi
         </div>
         <div className="finding-grid">
           {result?.recommendation && <MemoRecommendationCard recommendation={result.recommendation} />}
-          {filteredFindings.map((finding) => (
-            <MemoFindingCard key={`${finding.rule_id}-${finding.line_number}-${finding.column_start}-${finding.file_path || finding.source_address}`} finding={finding} />
-          ))}
-          {!filteredFindings.length && <div className="empty-state col-span-full">Run a scan to populate the forensic evidence deck.</div>}
+          {findingGroups.map((group) => {
+            const expanded = openGroup === group.id;
+            return (
+              <section className={`finding-group ${expanded ? "finding-group-open" : ""}`} key={group.id}>
+                <button
+                  type="button"
+                  className="finding-group-banner"
+                  aria-expanded={expanded}
+                  aria-controls={`finding-group-${group.id}`}
+                  onClick={() => setOpenGroup((current) => current === group.id ? null : group.id)}
+                >
+                  <span className="finding-group-code">{group.code}</span>
+                  <span className="finding-group-copy">
+                    <strong>{group.title}</strong>
+                    <small>{group.description}</small>
+                  </span>
+                  <span className="finding-group-summary">
+                    <b>{group.findings.length} issue{group.findings.length === 1 ? "" : "s"}</b>
+                    <small>{group.severitySummary}</small>
+                  </span>
+                  <span className={`risk-badge ${levels[group.highestSeverity]}`}>{group.highestSeverity}</span>
+                  <ChevronDown className="finding-group-chevron h-5 w-5" />
+                </button>
+                <div className="finding-group-body" id={`finding-group-${group.id}`} hidden={!expanded}>
+                  {group.findings.map((finding) => (
+                    <MemoFindingCard key={`${finding.rule_id}-${finding.line_number}-${finding.column_start}-${finding.file_path || finding.source_address}`} finding={finding} />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+          {!filteredFindings.length && (
+            <div className="empty-state col-span-full">
+              {result?.findings?.length ? "No findings match this filter." : "Run a scan to populate the forensic evidence deck."}
+            </div>
+          )}
         </div>
       </div>
     </section>

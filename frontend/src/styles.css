@@ -870,6 +870,107 @@ button {
   padding-top: 1rem;
 }
 
+.finding-group {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(110deg, rgba(94, 234, 212, 0.045), transparent 42%),
+    rgba(2, 6, 23, 0.34);
+  transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+.finding-group:hover,
+.finding-group-open {
+  border-color: var(--line-hot);
+  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.18);
+}
+
+.finding-group-banner {
+  display: grid;
+  grid-template-columns: 3.1rem minmax(13rem, 1fr) auto auto auto;
+  align-items: center;
+  gap: 0.8rem;
+  width: 100%;
+  min-height: 5rem;
+  padding: 0.8rem;
+  border: 0;
+  color: var(--text);
+  background: transparent;
+  text-align: left;
+}
+
+.finding-group-banner:hover {
+  background: rgba(94, 234, 212, 0.04);
+}
+
+.finding-group-code {
+  display: grid;
+  width: 3rem;
+  aspect-ratio: 1;
+  place-items: center;
+  border: 1px solid var(--line-hot);
+  border-radius: 6px;
+  color: var(--cyan);
+  background: rgba(94, 234, 212, 0.07);
+  font: 800 0.68rem ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: 0.1em;
+}
+
+.finding-group-copy,
+.finding-group-summary {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.finding-group-copy strong {
+  color: var(--text);
+  font-size: 0.92rem;
+}
+
+.finding-group-copy small,
+.finding-group-summary small {
+  color: var(--muted);
+  font-size: 0.65rem;
+  line-height: 1.4;
+}
+
+.finding-group-summary {
+  min-width: 8.5rem;
+  text-align: right;
+}
+
+.finding-group-summary b {
+  color: var(--text);
+  font: 800 0.72rem ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-transform: uppercase;
+}
+
+.finding-group-chevron {
+  color: var(--muted);
+  transition: color 180ms ease, transform 180ms ease;
+}
+
+.finding-group-open .finding-group-chevron {
+  color: var(--cyan);
+  transform: rotate(180deg);
+}
+
+.finding-group-body {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.85rem;
+  padding: 0.85rem;
+  border-top: 1px solid var(--line);
+  animation: phaseReveal 220ms ease-out;
+}
+
+.finding-group-body[hidden] {
+  display: none;
+}
+
 .recommendation-card,
 .finding-card,
 .user-record-box,
@@ -1268,11 +1369,23 @@ button {
 
   .history-filters,
   .finding-grid,
+  .finding-group-body,
   .metric-grid,
   .admin-stat-grid,
   .audit-detail-grid {
     grid-template-columns: 1fr;
   }
+
+  .finding-group-banner {
+    grid-template-columns: 2.7rem minmax(0, 1fr) auto auto;
+    gap: 0.65rem;
+  }
+
+  .finding-group-code { width: 2.65rem; }
+  .finding-group-summary { min-width: 0; text-align: right; }
+  .finding-group-summary small,
+  .finding-group-banner .risk-badge { display: none; }
+  .finding-group-copy small { display: none; }
 }
 
 /* Assessment platform extensions */
@@ -2148,6 +2261,8 @@ button {
   .scanline, .mission-header, .hero-grid, .ops-grid, .history-filters, .assessment-tabs, .print-command, .knowledge-base, .live-progress { display: none !important; }
   .mission-panel, .finding-card, .recommendation-card, .assessment-kpi { break-inside: avoid; border-color: #cbd5e1 !important; color: #101820 !important; background: #fff !important; box-shadow: none !important; }
   .assessment-view { display: grid !important; }
+  .finding-group-body[hidden] { display: grid !important; }
+  .finding-group-chevron { display: none !important; }
   .assessment-shell::before { content: "LEAKSHIELD PRO — CYBERSECURITY ASSESSMENT REPORT"; display: block; padding-bottom: 8mm; color: #0f766e; font: 700 16pt ui-monospace, monospace; }
   a { color: #075985 !important; text-decoration: none; }
 }
