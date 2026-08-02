@@ -2204,8 +2204,8 @@ button {
 
 .knowledge-base { margin-top: 0; }
 .knowledge-search { width: min(25rem, 100%); }
-.knowledge-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.65rem; margin-top: 1rem; }
-.knowledge-card { margin: 0; }
+.knowledge-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; gap: 0.65rem; margin-top: 1rem; }
+.knowledge-card { align-self: start; margin: 0; }
 .knowledge-card summary span { display: grid; color: var(--text); }
 .knowledge-card summary small { color: var(--muted); font: 0.58rem ui-monospace, monospace; text-transform: uppercase; }
 .knowledge-row { padding: 0.65rem; border-top: 1px solid var(--line); }

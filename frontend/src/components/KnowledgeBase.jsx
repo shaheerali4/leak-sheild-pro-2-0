@@ -24,7 +24,7 @@ export default function KnowledgeBase() {
       </div>
       <div className="knowledge-grid">
         {articles.map((article) => (
-          <details className="knowledge-card" key={article.id}>
+          <details className="knowledge-card" key={article.id} name="knowledge-article">
             <summary>
               <BookOpen className="h-5 w-5" />
               <span><small>{article.category}</small>{article.title}</span>
