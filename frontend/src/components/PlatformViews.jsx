@@ -75,10 +75,25 @@ export function DashboardView({ history, onLoadScan, onNavigate, result }) {
         <div>
           <span className="eyebrow"><ShieldCheck /> root@leakshield:~$ perimeter --status</span>
           <h2>THE PERIMETER<br />IS TALKING.</h2>
-          <p>Interrogate the public surface. Trace exposed routes. Correlate weak controls. Every signal stays grounded in observable evidence.</p>
+          <p>Map the public attack surface, verify observable weaknesses, and turn every signal into an actionable remediation path.</p>
           <div className="terminal-readout"><span>MODE</span><strong>PASSIVE_RECON</strong><span>PAYLOADS</span><strong>DISABLED</strong><span>INTEL</span><strong>FREE_SOURCES_ONLY</strong></div>
         </div>
         <button className="primary-button primary-button-large" onClick={() => onNavigate("scan")}><Play /> INITIALIZE OPERATION</button>
+      </section>
+
+      <section className="credibility-strip" aria-label="Assessment principles">
+        <article>
+          <ShieldCheck />
+          <div><strong>EVIDENCE FIRST</strong><span>Findings require specific, repeatable evidence.</span></div>
+        </article>
+        <article>
+          <LockKeyhole />
+          <div><strong>SAFE BY DEFAULT</strong><span>Passive checks only. No exploit payloads or credential guessing.</span></div>
+        </article>
+        <article>
+          <Database />
+          <div><strong>FREE INTELLIGENCE</strong><span>Official and public sources. No paid API required.</span></div>
+        </article>
       </section>
 
       <section className="metric-grid" aria-label="Security overview">

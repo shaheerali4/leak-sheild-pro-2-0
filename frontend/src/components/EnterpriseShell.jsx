@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   BookOpen,
   Boxes,
@@ -8,6 +9,8 @@ import {
   Gauge,
   History,
   Menu,
+  Maximize2,
+  Minimize2,
   PanelLeftClose,
   PanelLeftOpen,
   PlugZap,
@@ -62,10 +65,33 @@ export default function EnterpriseShell({
   theme
 }) {
   const [moduleCode, title, description] = viewTitles[activeView] || viewTitles.dashboard;
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    function syncFullscreenState() {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    }
+
+    syncFullscreenState();
+    document.addEventListener("fullscreenchange", syncFullscreenState);
+    return () => document.removeEventListener("fullscreenchange", syncFullscreenState);
+  }, []);
 
   function navigate(view) {
     onNavigate(view);
     onMobileOpenChange(false);
+  }
+
+  async function togglePresentationMode() {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch {
+      // Browsers can deny fullscreen when it is restricted by device policy.
+    }
   }
 
   return (
@@ -110,6 +136,15 @@ export default function EnterpriseShell({
             <div className={`system-status ${loading ? "status-running" : ""}`}>
               <span />{loading ? "OPERATION ACTIVE" : "NODE 01 // SECURE"}
             </div>
+            <button
+              className="icon-button presentation-button"
+              onClick={togglePresentationMode}
+              aria-label={isFullscreen ? "Exit presentation mode" : "Enter presentation mode"}
+              title={isFullscreen ? "Exit presentation mode" : "Enter presentation mode"}
+              type="button"
+            >
+              {isFullscreen ? <Minimize2 /> : <Maximize2 />}
+            </button>
             <button className="icon-button" onClick={() => navigate("help")} aria-label="Open help"><BookOpen /></button>
             <button className="icon-button" onClick={onToggleTheme} aria-label="Switch console phosphor profile"><SunMoon /></button>
             <div className="user-avatar" aria-label="LeakShield operator">OP</div>
