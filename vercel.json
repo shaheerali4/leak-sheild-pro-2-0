@@ -58,7 +58,8 @@
     {
       "source": "^/admin=true$",
       "destination": {
-        "service": "frontend"
+        "service": "frontend",
+        "path": "/"
       }
     },
     {
