@@ -94,7 +94,6 @@ export default function EnterpriseShell({
             <span className="status-dot status-good" />
             <span><strong>ENGINE // ONLINE</strong><small>passive mode · no paid APIs</small></span>
           </div>
-          <a className="admin-link" href="/admin"><ShieldCheck /> <span>ROOT ACCESS</span></a>
         </div>
       </aside>
 

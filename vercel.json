@@ -48,13 +48,6 @@
       ]
     }
   ],
-  "redirects": [
-    {
-      "source": "/admin",
-      "destination": "/?admin=true",
-      "permanent": false
-    }
-  ],
   "rewrites": [
     {
       "source": "/api/:path*",

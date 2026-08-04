@@ -46,7 +46,7 @@ function initialView() {
 }
 
 export default function App() {
-  const isAdminPath = window.location.pathname === "/admin" || new URLSearchParams(window.location.search).get("admin") === "true";
+  const isAdminPath = window.location.pathname === "/admin=true";
   if (isAdminPath) return SERVERLESS_FEATURES_ENABLED ? <AdminDashboard /> : <UnavailableAdmin />;
   return <SecurityWorkspace />;
 }

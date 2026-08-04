@@ -72,23 +72,22 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .icon-button { display: inline-grid; place-items: center; width: 38px; height: 38px; padding: 0; border: 1px solid var(--line); border-radius: 0; background: var(--panel); color: var(--text-muted); cursor: pointer; transition: border-color .15s ease, color .15s ease, background .15s ease; }
 .icon-button:hover { border-color: var(--signal); background: var(--signal-dim); color: var(--signal-hot); }
 .sidebar-nav { display: flex; flex: 1; flex-direction: column; gap: 3px; margin-top: 30px; }
-.sidebar-nav button, .admin-link { position: relative; display: grid; grid-template-columns: 19px 22px minmax(0, 1fr); align-items: center; min-height: 43px; width: 100%; padding: 0 10px; gap: 8px; border: 0; border-left: 1px solid transparent; background: transparent; color: var(--text-muted); text-decoration: none; text-align: left; cursor: pointer; white-space: nowrap; transition: color .15s ease, background .15s ease, border-color .15s ease; }
-.sidebar-nav button:hover, .admin-link:hover { border-left-color: var(--line-hard); background: var(--panel); color: var(--text); }
+.sidebar-nav button { position: relative; display: grid; grid-template-columns: 19px 22px minmax(0, 1fr); align-items: center; min-height: 43px; width: 100%; padding: 0 10px; gap: 8px; border: 0; border-left: 1px solid transparent; background: transparent; color: var(--text-muted); text-decoration: none; text-align: left; cursor: pointer; white-space: nowrap; transition: color .15s ease, background .15s ease, border-color .15s ease; }
+.sidebar-nav button:hover { border-left-color: var(--line-hard); background: var(--panel); color: var(--text); }
 .sidebar-nav button.nav-item-active { border-left-color: var(--signal); background: linear-gradient(90deg, var(--signal-dim), transparent); color: var(--signal-hot); }
 .sidebar-nav button.nav-item-active::after { content: ">"; position: absolute; right: 8px; color: var(--signal); }
 .sidebar-nav button.nav-item-accent:not(.nav-item-active) { color: var(--signal); }
 .sidebar-nav small { color: var(--text-soft); font-size: 8px; }
-.sidebar-nav span, .admin-link span { overflow: hidden; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-overflow: ellipsis; text-transform: uppercase; }
+.sidebar-nav span { overflow: hidden; font-size: 10px; font-weight: 600; letter-spacing: .04em; text-overflow: ellipsis; text-transform: uppercase; }
 .nav-divider { height: 1px; margin: 13px 9px; background: repeating-linear-gradient(90deg, var(--line) 0 5px, transparent 5px 9px); }
 .sidebar-foot { display: grid; gap: 8px; }
 .workspace-health { display: flex; align-items: center; padding: 11px; gap: 9px; border: 1px solid var(--line); background: var(--panel); white-space: nowrap; overflow: hidden; }
 .workspace-health > span:last-child { display: grid; gap: 2px; }
 .workspace-health strong { color: var(--signal); font-size: 8px; letter-spacing: .08em; }
 .workspace-health small { color: var(--text-soft); font-size: 7px; }
-.admin-link { grid-template-columns: 19px 1fr; border: 1px solid transparent; }
-.sidebar-collapsed .brand > span:last-child, .sidebar-collapsed .brand-row .desktop-only, .sidebar-collapsed .sidebar-nav small, .sidebar-collapsed .sidebar-nav span, .sidebar-collapsed .admin-link span, .sidebar-collapsed .workspace-health > span:last-child { display: none; }
+.sidebar-collapsed .brand > span:last-child, .sidebar-collapsed .brand-row .desktop-only, .sidebar-collapsed .sidebar-nav small, .sidebar-collapsed .sidebar-nav span, .sidebar-collapsed .workspace-health > span:last-child { display: none; }
 .sidebar-collapsed .brand-row { justify-content: center; }
-.sidebar-collapsed .sidebar-nav button, .sidebar-collapsed .admin-link { display: flex; justify-content: center; padding: 0; }
+.sidebar-collapsed .sidebar-nav button { display: flex; justify-content: center; padding: 0; }
 .sidebar-collapsed .workspace-health { justify-content: center; padding-inline: 0; }
 .mobile-only, .sidebar-scrim { display: none; }
 
@@ -216,7 +215,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 }
 
 @media (max-width: 1000px) {
-  .app-frame { display: block; }.app-sidebar { position: fixed; left: 0; width: 270px; transform: translateX(-102%); }.app-sidebar.sidebar-mobile-open { transform: none; box-shadow: 22px 0 60px rgba(0,0,0,.65); }.app-sidebar .brand > span:last-child, .app-sidebar .sidebar-nav small, .app-sidebar .sidebar-nav span, .app-sidebar .admin-link span, .app-sidebar .workspace-health > span:last-child { display: grid; }.app-sidebar .sidebar-nav button, .app-sidebar .admin-link { display: grid; justify-content: initial; padding: 0 10px; }.sidebar-scrim { position: fixed; z-index: 39; inset: 0; display: block; border: 0; background: rgba(0,0,0,.76); }.desktop-only { display: none !important; }.mobile-only { display: inline-grid; }
+  .app-frame { display: block; }.app-sidebar { position: fixed; left: 0; width: 270px; transform: translateX(-102%); }.app-sidebar.sidebar-mobile-open { transform: none; box-shadow: 22px 0 60px rgba(0,0,0,.65); }.app-sidebar .brand > span:last-child, .app-sidebar .sidebar-nav small, .app-sidebar .sidebar-nav span, .app-sidebar .workspace-health > span:last-child { display: grid; }.app-sidebar .sidebar-nav button { display: grid; justify-content: initial; padding: 0 10px; }.sidebar-scrim { position: fixed; z-index: 39; inset: 0; display: block; border: 0; background: rgba(0,0,0,.76); }.desktop-only { display: none !important; }.mobile-only { display: inline-grid; }
   .topbar { padding-inline: 16px; }.workspace-main { padding: 27px 17px 52px; }.scan-layout { grid-template-columns: 1fr; }.scan-guidance-panel { grid-row: 2; }.knowledge-layout { grid-template-columns: 1fr; }.knowledge-index { position: static; }.article-index { grid-template-columns: repeat(2,1fr); max-height: none; }
   .history-table .table-head, .history-table .table-row { grid-template-columns: minmax(190px,1.5fr) 90px 65px minmax(125px,1fr) 25px; }.history-table .table-head > span:nth-child(4), .history-table .table-row > span:nth-child(4) { display: none; }.split-inventory { grid-template-columns: 1fr; }.endpoint-list { border-right: 0; }.split-inventory > aside { border-top: 1px solid var(--line); border-left: 0; }.admin-grid { grid-template-columns: 1fr; }
 }
