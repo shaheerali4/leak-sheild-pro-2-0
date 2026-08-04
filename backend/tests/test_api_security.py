@@ -70,6 +70,34 @@ def test_project_scan_reports_file_relative_location_and_evidence() -> None:
     assert finding["value_preview"] not in finding["context_snippet"]
 
 
+def test_api_key_result_names_provider_and_exact_location() -> None:
+    _rate_requests.clear()
+    google_key = "AIza" + ("Ab3_" * 8) + "XYZ"
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/scans",
+            headers={"X-LeakShield-Session": SESSION_A},
+            json={
+                "mode": "text",
+                "source_name": "src/public-config.js",
+                "content": f'const apiKey = "{google_key}";',
+            },
+        )
+
+    assert response.status_code == 201
+    findings = response.json()["findings"]
+    assert len(findings) == 1
+    finding = findings[0]
+    assert finding["rule_id"] == "google-api-key"
+    assert finding["credential_provider"] == "Google Cloud / Google Maps Platform"
+    assert finding["credential_kind"] == "Google API Key"
+    assert finding["verification_status"] == "potential"
+    assert finding["file_path"] == "src/public-config.js"
+    assert finding["line_number"] == 1
+    assert finding["column_start"] > 1
+    assert google_key not in finding["context_snippet"]
+
+
 def test_scan_requires_a_canonical_session_identifier() -> None:
     with TestClient(app) as client:
         response = client.post(

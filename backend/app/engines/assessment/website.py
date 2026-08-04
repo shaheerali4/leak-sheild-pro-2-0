@@ -101,6 +101,7 @@ CONFIRMED_PUBLIC_SECRET_RULES = {
     "stripe-secret-key",
     "slack-token",
     "sendgrid-key",
+    "google-oauth-client-secret",
     "database-url",
     "basic-auth-url",
     "private-key-block",
@@ -1013,6 +1014,13 @@ class WebsiteAssessmentEngine:
                                     f"{detection.rule.secret_type} pattern matched at response-body line "
                                     f"{detection.line_number}, columns {detection.column_start}-"
                                     f"{detection.column_end}. Redacted preview: {detection.value_preview}. "
+                                    f"Provider classification: {detection.rule.provider or 'not provider-specific'}. "
+                                    f"Credential type: {detection.rule.secret_type}. "
+                                    + (
+                                        f"Matched assignment label: {detection.matched_identifier}. "
+                                        if detection.matched_identifier
+                                        else ""
+                                    )
                                     + (
                                         "The credential format is specific enough to confirm public exposure."
                                         if verification_status == "detected"
@@ -1029,6 +1037,10 @@ class WebsiteAssessmentEngine:
                                 ),
                                 "confidence": detection.rule.confidence,
                                 "verification_status": verification_status,
+                                "credential_provider": detection.rule.provider,
+                                "credential_kind": detection.rule.secret_type,
+                                "matched_identifier": detection.matched_identifier,
+                                "provider_scope": detection.rule.provider_scope,
                                 "owasp": owasp,
                                 "cwe": cwe,
                                 "capec": capec,
@@ -1340,7 +1352,11 @@ class WebsiteAssessmentEngine:
                     "javascript": {
                         **javascript,
                         "endpoints": sorted(set(javascript["endpoints"]))[:100],
-                        "potential_secrets": sum("Potential" in item["secret_type"] for item in findings),
+                        "potential_secrets": sum(
+                            item.get("verification_status") == "potential"
+                            and item.get("location_type") == "response_body"
+                            for item in findings
+                        ),
                     },
                     "threat_intelligence": threat_intel,
                     "robots": next((item["text"] for item in fetched if urlparse(item["url"]).path == "/robots.txt" and item["status"] == 200), None),

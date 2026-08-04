@@ -46,6 +46,10 @@ def test_website_evidence_metadata_survives_persistence_mapping() -> None:
             "expected_value": "Content-Security-Policy: default-src 'self'",
             "detection_method": "Inspected the public homepage response headers.",
             "verification_status": "detected",
+            "credential_provider": "Google Cloud / Google Maps Platform",
+            "credential_kind": "Google API Key",
+            "matched_identifier": "api_key",
+            "provider_scope": "Enabled APIs require provider-side review.",
             "external_reference": "https://nvd.nist.gov/vuln/detail/CVE-2026-0001",
             "cve": "CVE-2026-0001",
         },
@@ -76,6 +80,10 @@ def test_website_evidence_metadata_survives_persistence_mapping() -> None:
     assert response.expected_value == "Content-Security-Policy: default-src 'self'"
     assert response.detection_method == "Inspected the public homepage response headers."
     assert response.verification_status == "detected"
+    assert response.credential_provider == "Google Cloud / Google Maps Platform"
+    assert response.credential_kind == "Google API Key"
+    assert response.matched_identifier == "api_key"
+    assert response.provider_scope == "Enabled APIs require provider-side review."
     assert response.cve == "CVE-2026-0001"
     assert response.external_reference.endswith("CVE-2026-0001")
 

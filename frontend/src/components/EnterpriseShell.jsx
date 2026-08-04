@@ -38,18 +38,7 @@ const secondaryNavigation = [
   { id: "help", label: "Field Manual", code: "09", icon: CircleHelp }
 ];
 
-const viewTitles = {
-  dashboard: ["00", "Command Center", "Live posture and attack-surface telemetry."],
-  scan: ["01", "Initialize Scan", "Configure a bounded reconnaissance operation."],
-  history: ["02", "Operation Log", "Replay previous assessments and risk changes."],
-  assets: ["03", "Surface Map", "Inspect every public route, host and technology signal."],
-  findings: ["04", "Exposure Registry", "Exact evidence, impact and remediation intelligence."],
-  cves: ["05", "CVE Intelligence", "Official correlations for observed software versions."],
-  reports: ["06", "Report Vault", "Package assessment evidence for technical and executive review."],
-  integrations: ["07", "Data Uplinks", "Free public intelligence sources connected to the engine."],
-  settings: ["08", "Console Configuration", "Tune the local operator workspace."],
-  help: ["09", "Field Manual", "Learn the weakness, the impact and the defensive response."]
-};
+const unifiedWorkspaceTitle = ["00-09", "Unified Command Center", "The complete assessment workflow on one continuous evidence surface."];
 
 export default function EnterpriseShell({
   activeView,
@@ -64,7 +53,7 @@ export default function EnterpriseShell({
   sidebarCollapsed,
   theme
 }) {
-  const [moduleCode, title, description] = viewTitles[activeView] || viewTitles.dashboard;
+  const [moduleCode, title, description] = unifiedWorkspaceTitle;
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {

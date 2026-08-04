@@ -107,6 +107,10 @@ class FindingResponse(BaseModel):
     expected_value: str | None = None
     detection_method: str | None = None
     verification_status: str | None = None
+    credential_provider: str | None = None
+    credential_kind: str | None = None
+    matched_identifier: str | None = None
+    provider_scope: str | None = None
     external_reference: str | None = None
     cve: str | None = None
     owasp: str | None = None

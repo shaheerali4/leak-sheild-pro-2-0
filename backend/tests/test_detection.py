@@ -28,6 +28,7 @@ def test_production_detector_keeps_specialized_credential_coverage() -> None:
         "github-token",
         "openai-api-key",
         "google-api-key",
+        "google-oauth-client-secret",
         "stripe-secret-key",
         "slack-token",
         "sendgrid-key",
@@ -42,16 +43,27 @@ def test_google_and_named_api_credentials_are_detected_with_redacted_context() -
 
     findings = DetectionEngine().scan(content)
     google_findings = [item for item in findings if item.rule.rule_id == "google-api-key"]
-    generic_values = {
-        item.secret_value for item in findings if item.rule.rule_id == "generic-api-key"
-    }
+    oauth_findings = [item for item in findings if item.rule.rule_id == "google-oauth-client-secret"]
+    generic_values = {item.secret_value for item in findings if item.rule.rule_id == "generic-api-key"}
 
     assert len(google_findings) == 1
+    assert len(oauth_findings) == 1
     assert google_findings[0].secret_value == google_key
-    assert oauth_secret in generic_values
-    assert google_key in generic_values
+    assert google_findings[0].rule.provider == "Google Cloud / Google Maps Platform"
+    assert oauth_findings[0].secret_value == oauth_secret
+    assert oauth_findings[0].rule.provider == "Google Identity / OAuth 2.0"
+    assert generic_values == set()
     assert all("[REDACTED]" in item.context_snippet for item in findings)
     assert all(item.secret_value not in item.context_snippet for item in findings)
+
+
+def test_unidentified_api_assignment_remains_honestly_generic() -> None:
+    findings = DetectionEngine().scan("api_key='K9mP2xT7vQ4nR8sW3yL6zA1b'")
+
+    assert len(findings) == 1
+    assert findings[0].rule.rule_id == "generic-api-key"
+    assert findings[0].rule.provider == "Unidentified provider"
+    assert findings[0].matched_identifier == "api_key"
 
 
 def test_low_entropy_generic_assignments_are_ignored() -> None:

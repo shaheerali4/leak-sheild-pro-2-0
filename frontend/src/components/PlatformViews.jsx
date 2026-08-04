@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   Activity,
   AlertTriangle,
@@ -336,7 +337,7 @@ export function FindingsView({ result }) {
   const deferredQuery = useDeferredValue(query.toLowerCase());
   const findings = useMemo(() => {
     const rows = (result?.findings || []).filter((item) => {
-      const haystack = [item.secret_type, item.rule_id, item.source_address, item.file_path, item.observed_evidence, item.affected_component].join(" ").toLowerCase();
+      const haystack = [item.secret_type, item.credential_provider, item.credential_kind, item.matched_identifier, item.rule_id, item.source_address, item.file_path, item.observed_evidence, item.affected_component].join(" ").toLowerCase();
       return (!deferredQuery || haystack.includes(deferredQuery)) && (!severity || item.risk_level === severity);
     });
     return [...rows].sort((a, b) => (severityOrder[b.risk_level] - severityOrder[a.risk_level]) * (sortDirection === "desc" ? 1 : -1));
@@ -389,7 +390,7 @@ function FindingTable({ findings, onSelect, result }) {
       <div className="table-head"><span>Finding</span><span>Severity</span><span>Asset</span><span>Evidence</span><span>First seen</span><span>Status</span></div>
       {findings.map((finding) => (
         <button className="table-row" key={findingKey(finding)} onClick={() => onSelect(finding)}>
-          <span className="table-primary"><span className="finding-type-icon"><Fingerprint /></span><span><strong>{finding.secret_type}</strong><small>{finding.rule_id}</small></span></span>
+          <span className="table-primary"><span className="finding-type-icon"><Fingerprint /></span><span><strong>{finding.secret_type}</strong><small>{finding.credential_provider ? `${finding.credential_provider} // ${finding.rule_id}` : finding.rule_id}</small></span></span>
           <span><SeverityBadge level={finding.risk_level} /></span>
           <span className="truncate-cell">{finding.file_path || finding.source_address || result.source_name}</span>
           <span className="truncate-cell">{finding.observed_evidence || finding.context_snippet || finding.explanation?.summary}</span>
@@ -405,17 +406,16 @@ function FindingDrawer({ finding, onClose, result }) {
   const explanation = finding.explanation || {};
   const learning = explanation.learning || {};
   const fixes = explanation.developer_fixes || {};
-  const address = finding.file_path || finding.source_address || result.source_name;
-  const exactLocation = finding.file_path || ["response_body", "html_form", "project_file", "pasted_text"].includes(finding.location_type)
-    ? `${address}:${finding.line_number || 1}:${finding.column_start || 1}`
-    : address;
-  return (
+  const exactLocation = findingLocation(finding, result.source_name);
+  return createPortal(
     <div className="drawer-layer" role="dialog" aria-modal="true" aria-label={`${finding.secret_type} details`}>
       <button className="drawer-backdrop" onClick={onClose} aria-label="Close finding details" />
       <aside className="finding-drawer">
         <header><div><span className="eyebrow">{finding.rule_id}</span><h2>{finding.secret_type}</h2></div><button className="icon-button" onClick={onClose} aria-label="Close"><X /></button></header>
         <div className="drawer-badges"><SeverityBadge level={finding.risk_level} /><StatusBadge status={verificationLabel(finding.verification_status)} />{finding.confidence > 0 && <span className="confidence-badge">{Math.round(finding.confidence * 100)}% evidence confidence</span>}</div>
+        {finding.credential_provider && <section className="drawer-section api-identity-panel"><h3>API credential identity</h3><dl><div><dt>Provider</dt><dd><strong>{finding.credential_provider}</strong></dd></div><div><dt>Credential type</dt><dd>{finding.credential_kind || finding.secret_type}</dd></div>{finding.matched_identifier && <div><dt>Matched assignment</dt><dd><code>{finding.matched_identifier}</code></dd></div>}<div><dt>Redacted fingerprint</dt><dd><code>{finding.value_preview}</code></dd></div><div className="api-scope-note"><dt>What this proves</dt><dd>{finding.provider_scope || "The credential family was identified from its format; permissions and validity require authorized provider-side verification."}</dd></div></dl></section>}
         <section className="drawer-section evidence-summary"><h3>Evidence and scope</h3><dl><div><dt>Affected location</dt><dd><code>{exactLocation}</code></dd></div><div><dt>Affected component</dt><dd>{finding.affected_component || finding.secret_type}</dd></div><div><dt>Observed</dt><dd>{finding.observed_evidence || finding.context_snippet || explanation.summary}</dd></div><div><dt>Conclusion</dt><dd>{verificationExplanation(finding.verification_status)}</dd></div><div><dt>Expected secure state</dt><dd>{finding.expected_value || explanation.remediation}</dd></div><div><dt>Detection method</dt><dd>{finding.detection_method || "Pattern and context analysis"}</dd></div></dl></section>
+        {finding.source_address && <a className="secondary-button evidence-source-link" href={safeHttpUrl(finding.source_address)} target="_blank" rel="noreferrer">Open public evidence source <ExternalLink /></a>}
         <section className="drawer-section"><h3>Impact</h3><p>{explanation.attacker_impact}</p><p>{explanation.business_impact}</p></section>
         <section className="drawer-section"><h3>Recommended remediation</h3><p>{explanation.remediation}</p></section>
         <div className="mapping-row">{[finding.owasp, finding.cwe, finding.capec, finding.cve].filter(Boolean).map((item) => <span key={item}>{item}</span>)}</div>
@@ -424,7 +424,8 @@ function FindingDrawer({ finding, onClose, result }) {
         {Object.keys(fixes).length > 0 && <details className="drawer-accordion"><summary><Code2 /> Developer Fix Assistant <ChevronDown /></summary><div className="learning-content"><p>{fixes.generic}</p>{Object.entries(fixes.snippets || {}).map(([framework, snippet]) => <CodeSnippet framework={framework} snippet={snippet} key={framework} />)}</div></details>}
         {(learning.references || []).length > 0 && <section className="drawer-section"><h3>Official references</h3><div className="reference-list">{learning.references.map((reference) => <a href={safeHttpUrl(reference.url)} target="_blank" rel="noreferrer" key={reference.url}>{reference.title}<ExternalLink /></a>)}</div></section>}
       </aside>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -534,6 +535,7 @@ function findingGroupId(finding) {
 }
 
 function findingKey(finding) { return [finding.rule_id, finding.line_number, finding.column_start, finding.file_path || finding.source_address].join("-"); }
+function findingLocation(finding, fallback = "Unknown source") { const address = finding.file_path || finding.source_address || fallback; return finding.file_path || ["response_body", "html_form", "project_file", "pasted_text"].includes(finding.location_type) ? `${address}:${finding.line_number || 1}:${finding.column_start || 1}` : address; }
 function formatRelativeDate(value) { const hours = Math.floor((Date.now() - new Date(value).getTime()) / 3_600_000); if (hours < 1) return "Just now"; if (hours < 24) return `${hours}h ago`; const days = Math.floor(hours / 24); return `${days}d ago`; }
 function safeHttpUrl(value) { try { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) ? url.toString() : "#"; } catch { return "#"; } }
 function reportName(result) { return `leakshield-${(result?.source_name || "report").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`; }
@@ -541,9 +543,9 @@ function securityScoreFor(result) { return result ? result.security_score ?? Mat
 function gradeForScore(score) { if (score >= 90) return "A"; if (score >= 80) return "B"; if (score >= 70) return "C"; if (score >= 55) return "D"; return "F"; }
 function downloadFile(name, content, type) { const url = URL.createObjectURL(new Blob([content], { type })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = name; anchor.click(); URL.revokeObjectURL(url); }
 function csvCell(value) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
-function exportCsv(result) { const header = ["Finding", "Rule", "Severity", "Asset", "Evidence", "Remediation"]; const rows = (result.findings || []).map((item) => [item.secret_type, item.rule_id, item.risk_level, item.file_path || item.source_address, item.observed_evidence || item.context_snippet, item.explanation?.remediation]); downloadFile(`${reportName(result)}.csv`, [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n"), "text/csv"); }
+function exportCsv(result) { const header = ["Finding", "Provider", "Credential type", "Rule", "Severity", "Exact location", "Evidence", "Remediation"]; const rows = (result.findings || []).map((item) => [item.secret_type, item.credential_provider || "Not provider-specific", item.credential_kind || "", item.rule_id, item.risk_level, findingLocation(item, result.source_name), item.observed_evidence || item.context_snippet, item.explanation?.remediation]); downloadFile(`${reportName(result)}.csv`, [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n"), "text/csv"); }
 function escapeHtml(value) { return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
-function exportHtml(result) { const findings = (result.findings || []).map((item) => `<article><span>${escapeHtml(item.risk_level)}</span><h2>${escapeHtml(item.secret_type)}</h2><p><strong>Asset:</strong> ${escapeHtml(item.file_path || item.source_address)}</p><p><strong>Evidence:</strong> ${escapeHtml(item.observed_evidence || item.context_snippet)}</p><p><strong>Remediation:</strong> ${escapeHtml(item.explanation?.remediation)}</p></article>`).join(""); const html = `<!doctype html><html><head><meta charset="utf-8"><title>LeakShield report</title><style>body{font:16px sans-serif;max-width:960px;margin:40px auto;color:#0f172a}header{border-bottom:3px solid #2563eb;padding-bottom:20px}article{border:1px solid #cbd5e1;border-radius:8px;padding:20px;margin:16px 0}span{font-weight:700;color:#dc2626}p{line-height:1.6}</style></head><body><header><h1>LeakShield Pro Security Report</h1><p>${escapeHtml(result.source_name)} · Grade ${escapeHtml(result.grade)} · ${escapeHtml(result.finding_count)} findings</p></header>${findings}</body></html>`; downloadFile(`${reportName(result)}.html`, html, "text/html"); }
+function exportHtml(result) { const findings = (result.findings || []).map((item) => `<article><span>${escapeHtml(item.risk_level)}</span><h2>${escapeHtml(item.secret_type)}</h2>${item.credential_provider ? `<p><strong>Provider:</strong> ${escapeHtml(item.credential_provider)}</p>` : ""}<p><strong>Exact location:</strong> ${escapeHtml(findingLocation(item, result.source_name))}</p><p><strong>Evidence:</strong> ${escapeHtml(item.observed_evidence || item.context_snippet)}</p><p><strong>Remediation:</strong> ${escapeHtml(item.explanation?.remediation)}</p></article>`).join(""); const html = `<!doctype html><html><head><meta charset="utf-8"><title>LeakShield report</title><style>body{font:16px sans-serif;max-width:960px;margin:40px auto;color:#0f172a}header{border-bottom:3px solid #2563eb;padding-bottom:20px}article{border:1px solid #cbd5e1;border-radius:8px;padding:20px;margin:16px 0}span{font-weight:700;color:#dc2626}p{line-height:1.6}</style></head><body><header><h1>LeakShield Pro Security Report</h1><p>${escapeHtml(result.source_name)} · Grade ${escapeHtml(result.grade)} · ${escapeHtml(result.finding_count)} findings</p></header>${findings}</body></html>`; downloadFile(`${reportName(result)}.html`, html, "text/html"); }
 
 function BoxesIcon(props) { return <Globe2 {...props} />; }
 function PlugIcon(props) { return <Network {...props} />; }

@@ -13,6 +13,8 @@ class SecretRule:
     attacker_impact: str
     consequence: str
     remediation: str
+    provider: str | None = None
+    provider_scope: str | None = None
 
 
 def compile_rule(pattern: str) -> re.Pattern[str]:
@@ -30,6 +32,8 @@ def create_rule(
     attacker_impact: str,
     consequence: str,
     remediation: str,
+    provider: str | None = None,
+    provider_scope: str | None = None,
 ) -> SecretRule:
     return SecretRule(
         rule_id=rule_id,
@@ -41,6 +45,8 @@ def create_rule(
         attacker_impact=attacker_impact,
         consequence=consequence,
         remediation=remediation,
+        provider=provider,
+        provider_scope=provider_scope,
     )
 
 
@@ -55,6 +61,8 @@ SECRET_RULES: tuple[SecretRule, ...] = (
         attacker_impact="Attackers can pair it with a secret key to access AWS APIs.",
         consequence="Cloud resources, S3 data, IAM permissions, and billing can be abused.",
         remediation="Disable the access key, rotate credentials, and audit CloudTrail activity.",
+        provider="Amazon Web Services (AWS)",
+        provider_scope="The key identifier proves the AWS credential family, but permissions require authorized IAM review.",
     ),
     create_rule(
         rule_id="aws-secret-access-key",
@@ -68,6 +76,8 @@ SECRET_RULES: tuple[SecretRule, ...] = (
         attacker_impact="Attackers may authenticate directly to AWS services.",
         consequence="This can lead to infrastructure takeover, data theft, and financial loss.",
         remediation="Revoke the key immediately, rotate dependent secrets, and review IAM policy scope.",
+        provider="Amazon Web Services (AWS)",
+        provider_scope="The credential is AWS-specific; its attached IAM permissions cannot be determined passively.",
     ),
     create_rule(
         rule_id="github-token",
@@ -84,6 +94,8 @@ SECRET_RULES: tuple[SecretRule, ...] = (
         ),
         consequence="Source code theft, CI/CD compromise, and supply-chain injection may occur.",
         remediation="Revoke the token in GitHub, rotate dependent credentials, and review audit logs.",
+        provider="GitHub",
+        provider_scope="The token family is GitHub-specific; repository and organization scopes require authorized GitHub review.",
     ),
     create_rule(
         rule_id="openai-api-key",
@@ -95,6 +107,8 @@ SECRET_RULES: tuple[SecretRule, ...] = (
         attacker_impact="Attackers can spend quota, access model endpoints, or abuse the associated account.",
         consequence="Unexpected billing and data exposure through API usage may occur.",
         remediation="Revoke the key, create a new scoped key, and keep it server-side only.",
+        provider="OpenAI",
+        provider_scope="The key format identifies OpenAI; project permissions and remaining validity require provider-side review.",
     ),
     create_rule(
         rule_id="google-api-key",
@@ -109,6 +123,21 @@ SECRET_RULES: tuple[SecretRule, ...] = (
             "Restrict the key by HTTP referrer, IP, and API scope; rotate it if unrestricted; "
             "and move sensitive services server-side."
         ),
+        provider="Google Cloud / Google Maps Platform",
+        provider_scope="The format identifies a Google API key. Enabled Google APIs and restrictions require authorized Google Cloud Console review.",
+    ),
+    create_rule(
+        rule_id="google-oauth-client-secret",
+        finding_type="Google OAuth Client Secret",
+        severity="HIGH",
+        confidence=0.92,
+        pattern=compile_rule(r"\bGOCS[A-Za-z0-9_-]{20,80}\b"),
+        description="A Google OAuth client secret was exposed.",
+        attacker_impact="Attackers may abuse the OAuth client identity when combined with a valid client ID and permitted redirect flow.",
+        consequence="OAuth integrations, user trust, and application identity may be compromised.",
+        remediation="Rotate the OAuth client secret in Google Cloud Console and keep it in server-side secret storage.",
+        provider="Google Identity / OAuth 2.0",
+        provider_scope="The prefix identifies a Google OAuth client secret; the associated client, redirect URIs, and status require provider-side review.",
     ),
     create_rule(
         rule_id="stripe-secret-key",
@@ -120,6 +149,8 @@ SECRET_RULES: tuple[SecretRule, ...] = (
         attacker_impact="Attackers can access payment operations permitted by the key.",
         consequence="Payment data, refunds, charges, and customer records may be compromised.",
         remediation="Revoke the key in Stripe, rotate webhooks if needed, and investigate dashboard logs.",
+        provider="Stripe",
+        provider_scope="The prefix identifies a live Stripe secret or restricted key; exact permissions require Stripe Dashboard review.",
     ),
     create_rule(
         rule_id="slack-token",
@@ -131,6 +162,8 @@ SECRET_RULES: tuple[SecretRule, ...] = (
         attacker_impact="Attackers can call Slack APIs with the leaked workspace identity.",
         consequence="Messages, workspace data, and integrations may be abused.",
         remediation="Revoke the token, rotate app credentials, and review Slack audit logs.",
+        provider="Slack",
+        provider_scope="The token prefix identifies Slack; workspace, app, and granted scopes require authorized Slack administration review.",
     ),
     create_rule(
         rule_id="sendgrid-key",
@@ -142,6 +175,8 @@ SECRET_RULES: tuple[SecretRule, ...] = (
         attacker_impact="Attackers can send email through the associated account.",
         consequence="Spam, phishing, domain reputation damage, and billing abuse may occur.",
         remediation="Revoke the key, rotate email credentials, and review recent mail activity.",
+        provider="Twilio SendGrid",
+        provider_scope="The key format identifies SendGrid; permission scopes and activity require provider-side review.",
     ),
     create_rule(
         rule_id="generic-api-key",
@@ -156,6 +191,8 @@ SECRET_RULES: tuple[SecretRule, ...] = (
         attacker_impact="Attackers can call the associated service as the leaked identity.",
         consequence="Quota abuse, data access, account takeover, or service disruption may occur.",
         remediation="Rotate the API key and move it to a managed secret store.",
+        provider="Unidentified provider",
+        provider_scope="The assignment looks like an API credential, but the provider cannot be identified from the value format or nearby public context.",
     ),
     create_rule(
         rule_id="password-assignment",

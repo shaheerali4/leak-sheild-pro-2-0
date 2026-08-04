@@ -25,6 +25,7 @@ STRUCTURAL_RULE_IDS = frozenset(
     {
         "aws-access-key-id",
         "google-api-key",
+        "google-oauth-client-secret",
         "jwt-token",
         "private-key-block",
         "database-url",
@@ -48,6 +49,7 @@ class DetectionFinding:
     column_start: int
     column_end: int
     context_snippet: str
+    matched_identifier: str | None = None
 
 
 class DetectionEngine:
@@ -61,7 +63,7 @@ class DetectionEngine:
         for rule in self.rules:
             for match in rule.pattern.finditer(content):
                 if len(findings) >= max_findings:
-                    return sorted(findings, key=lambda item: (item.line_number, item.column_start))
+                    return self._deduplicate(findings)
                 value = self._extract_secret_value(match)
                 normalized = value.strip()
                 if self._looks_like_example(normalized):
@@ -83,9 +85,33 @@ class DetectionEngine:
                         column_start=col,
                         column_end=col + len(match.group(0)),
                         context_snippet=escape(self._context(content, match.start(), match.end())),
+                        matched_identifier=self._matched_identifier(rule.rule_id, match),
                     )
                 )
-        return sorted(findings, key=lambda item: (item.line_number, item.column_start))
+        return self._deduplicate(findings)
+
+    @staticmethod
+    def _deduplicate(findings: list[DetectionFinding]) -> list[DetectionFinding]:
+        specific_hashes = {
+            finding.value_hash
+            for finding in findings
+            if finding.rule.rule_id != "generic-api-key"
+        }
+        strongest = [
+            finding
+            for finding in findings
+            if not (
+                finding.rule.rule_id == "generic-api-key"
+                and finding.value_hash in specific_hashes
+            )
+        ]
+        return sorted(strongest, key=lambda item: (item.line_number, item.column_start))
+
+    @staticmethod
+    def _matched_identifier(rule_id: str, match) -> str | None:
+        if rule_id != "generic-api-key" or not match.groups():
+            return None
+        return match.group(1).lower()
 
     @staticmethod
     def _extract_secret_value(match) -> str:

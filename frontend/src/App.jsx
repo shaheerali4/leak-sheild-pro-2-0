@@ -1,4 +1,4 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useRef, useState } from "react";
 import { AlertTriangle, Database, Loader2, LockKeyhole, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import {
   adminLogin,
@@ -36,6 +36,17 @@ scan_target=https://example.com`;
 const MAX_FOLDER_FILE_BYTES = 300_000;
 const MAX_FOLDER_TOTAL_BYTES = 1_200_000;
 const views = new Set(["dashboard", "scan", "history", "assets", "findings", "cves", "reports", "integrations", "settings", "help"]);
+const workspaceSectionCopy = {
+  scan: ["01", "Initialize Scan", "Configure and launch a bounded, passive assessment."],
+  history: ["02", "Operation Log", "Open earlier assessments without leaving this workspace."],
+  assets: ["03", "Surface Map", "Inspect endpoints, technologies, infrastructure, and public routes."],
+  findings: ["04", "Exposure Registry", "Review exact evidence, API identity, impact, and remediation."],
+  cves: ["05", "CVE Intelligence", "Review official matches for explicitly observed software versions."],
+  reports: ["06", "Report Vault", "Export technical and executive evidence packages."],
+  integrations: ["07", "Data Uplinks", "See the free public intelligence sources used by the engine."],
+  settings: ["08", "Console Configuration", "Tune display and local operation defaults."],
+  help: ["09", "Field Manual", "Search the educational security knowledge base."]
+};
 const SERVERLESS_FEATURES_ENABLED =
   import.meta.env.VITE_SERVERLESS_FEATURES === "true" ||
   (import.meta.env.VITE_SERVERLESS_FEATURES !== "false" && typeof window !== "undefined" && !["localhost", "127.0.0.1"].includes(window.location.hostname));
@@ -91,16 +102,40 @@ function SecurityWorkspace() {
     document.documentElement.dataset.density = localStorage.getItem("leakshield.denseTables") === "true" ? "compact" : "comfortable";
   }, []);
   useEffect(() => {
-    const onHashChange = () => setActiveView(initialView());
+    const onHashChange = () => {
+      const nextView = initialView();
+      setActiveView(nextView);
+      window.requestAnimationFrame(() => {
+        if (nextView === "dashboard") window.scrollTo({ top: 0 });
+        else document.getElementById(`module-${nextView}`)?.scrollIntoView({ block: "start" });
+      });
+    };
     window.addEventListener("hashchange", onHashChange);
+    if (window.location.hash) onHashChange();
     return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  useEffect(() => {
+    const sections = [...views].map((view) => document.getElementById(`module-${view}`)).filter(Boolean);
+    const observer = new IntersectionObserver((entries) => {
+      const current = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((left, right) => Math.abs(left.boundingClientRect.top) - Math.abs(right.boundingClientRect.top))[0];
+      const view = current?.target.dataset.workspaceView;
+      if (!view || !views.has(view)) return;
+      setActiveView(view);
+      window.history.replaceState(null, "", `#${view}`);
+    }, { rootMargin: "-18% 0px -68% 0px", threshold: 0 });
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
   }, []);
 
   const navigate = useCallback((view) => {
     const safeView = views.has(view) ? view : "dashboard";
     setActiveView(safeView);
     window.history.replaceState(null, "", `#${safeView}`);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (safeView === "dashboard") window.scrollTo({ top: 0, behavior: "smooth" });
+    else document.getElementById(`module-${safeView}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
   const toggleSidebar = useCallback(() => {
@@ -167,21 +202,19 @@ function SecurityWorkspace() {
     finally { setLoading(false); }
   }, []);
 
-  const view = useMemo(() => {
-    const sharedScanProps = { content, error, handleFolderUpload, loading, onScan: scan, projectFiles, scanMode, setContent, setScanMode, setSourceName, setWebsiteUrl, sourceName, websiteUrl };
-    switch (activeView) {
-      case "scan": return <ScanView {...sharedScanProps} />;
-      case "history": return <HistoryView history={history} loadScan={loadScan} query={query} riskFilter={riskFilter} setQuery={setQuery} setRiskFilter={setRiskFilter} onNavigate={navigate} />;
-      case "assets": return <AssetsView result={result} />;
-      case "findings": return <FindingsView result={result} />;
-      case "cves": return <CveView result={result} />;
-      case "reports": return <ReportsView result={result} />;
-      case "integrations": return <IntegrationsView result={result} />;
-      case "settings": return <SettingsView theme={theme} onToggleTheme={toggleTheme} />;
-      case "help": return <HelpView />;
-      default: return <DashboardView history={history} onLoadScan={loadScan} onNavigate={navigate} result={result} />;
-    }
-  }, [activeView, content, error, handleFolderUpload, history, loadScan, loading, navigate, projectFiles, query, result, riskFilter, scan, scanMode, sourceName, theme, toggleTheme, websiteUrl]);
+  const sharedScanProps = { content, error, handleFolderUpload, loading, onScan: scan, projectFiles, scanMode, setContent, setScanMode, setSourceName, setWebsiteUrl, sourceName, websiteUrl };
+  const workspaceModules = [
+    { id: "dashboard", content: <DashboardView history={history} onLoadScan={loadScan} onNavigate={navigate} result={result} /> },
+    { id: "scan", content: <ScanView {...sharedScanProps} /> },
+    { id: "history", content: <HistoryView history={history} loadScan={loadScan} query={query} riskFilter={riskFilter} setQuery={setQuery} setRiskFilter={setRiskFilter} onNavigate={navigate} /> },
+    { id: "assets", content: <AssetsView result={result} /> },
+    { id: "findings", content: <FindingsView result={result} /> },
+    { id: "cves", content: <CveView result={result} /> },
+    { id: "reports", content: <ReportsView result={result} /> },
+    { id: "integrations", content: <IntegrationsView result={result} /> },
+    { id: "settings", content: <SettingsView theme={theme} onToggleTheme={toggleTheme} /> },
+    { id: "help", content: <HelpView /> }
+  ];
 
   return (
     <EnterpriseShell
@@ -196,9 +229,21 @@ function SecurityWorkspace() {
       sidebarCollapsed={sidebarCollapsed}
       theme={theme}
     >
-      {error && activeView !== "scan" && <div className="alert alert-error global-alert"><AlertTriangle /><span><strong>Action could not complete</strong>{error}</span></div>}
-      {view}
+      <div className="unified-workspace">
+        {error && <div className="alert alert-error global-alert"><AlertTriangle /><span><strong>Action could not complete</strong>{error}</span></div>}
+        {workspaceModules.map((module) => <WorkspaceModule id={module.id} key={module.id}>{module.content}</WorkspaceModule>)}
+      </div>
     </EnterpriseShell>
+  );
+}
+
+function WorkspaceModule({ children, id }) {
+  const section = workspaceSectionCopy[id];
+  return (
+    <section className={`workspace-module workspace-module-${id}`} data-workspace-view={id} id={`module-${id}`} aria-labelledby={section ? `module-${id}-title` : undefined}>
+      {section && <header className="workspace-module-heading"><span>{section[0]}</span><div><p>WORKSPACE_MODULE // {id.toUpperCase()}</p><h2 id={`module-${id}-title`}>{section[1]}</h2><small>{section[2]}</small></div></header>}
+      {children}
+    </section>
   );
 }
 

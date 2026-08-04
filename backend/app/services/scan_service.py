@@ -87,7 +87,8 @@ class ScanService:
                 "observed_evidence": (
                     f"{detection.rule.secret_type} signature matched at line {source_line}, "
                     f"columns {detection.column_start}-{detection.column_end}. "
-                    f"Redacted preview: {detection.value_preview}."
+                    f"Redacted preview: {detection.value_preview}. "
+                    f"Provider classification: {detection.rule.provider or 'not provider-specific'}."
                 ),
                 "expected_value": (
                     "No credential, token, private key, password, or connection secret should be "
@@ -97,6 +98,11 @@ class ScanService:
                     "Scanned the submitted text with LeakShield credential signatures, mapped the "
                     "match to its original source, and redacted the matched value."
                 ),
+                "verification_status": "potential",
+                "credential_provider": detection.rule.provider,
+                "credential_kind": detection.rule.secret_type,
+                "matched_identifier": detection.matched_identifier,
+                "provider_scope": detection.rule.provider_scope,
             }
             model = Finding(
                 scan=scan,
@@ -229,6 +235,10 @@ class ScanService:
                     "expected_value",
                     "detection_method",
                     "verification_status",
+                    "credential_provider",
+                    "credential_kind",
+                    "matched_identifier",
+                    "provider_scope",
                     "external_reference",
                     "cve",
                     "owasp",
@@ -314,6 +324,10 @@ class ScanService:
             expected_value=finding_metadata.get("expected_value"),
             detection_method=finding_metadata.get("detection_method"),
             verification_status=finding_metadata.get("verification_status"),
+            credential_provider=finding_metadata.get("credential_provider"),
+            credential_kind=finding_metadata.get("credential_kind"),
+            matched_identifier=finding_metadata.get("matched_identifier"),
+            provider_scope=finding_metadata.get("provider_scope"),
             external_reference=finding_metadata.get("external_reference"),
             cve=finding_metadata.get("cve"),
             owasp=finding_metadata.get("owasp", owasp),
