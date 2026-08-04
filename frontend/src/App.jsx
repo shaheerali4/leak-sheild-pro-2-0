@@ -117,17 +117,24 @@ function SecurityWorkspace() {
 
   useEffect(() => {
     const sections = [...views].map((view) => document.getElementById(`module-${view}`)).filter(Boolean);
-    const observer = new IntersectionObserver((entries) => {
-      const current = entries
-        .filter((entry) => entry.isIntersecting)
-        .sort((left, right) => Math.abs(left.boundingClientRect.top) - Math.abs(right.boundingClientRect.top))[0];
-      const view = current?.target.dataset.workspaceView;
+    let animationFrame = 0;
+    function syncActiveSection() {
+      animationFrame = 0;
+      const current = sections.filter((section) => section.getBoundingClientRect().top <= 140).at(-1) || sections[0];
+      const view = current?.dataset.workspaceView;
       if (!view || !views.has(view)) return;
       setActiveView(view);
-      window.history.replaceState(null, "", `#${view}`);
-    }, { rootMargin: "-18% 0px -68% 0px", threshold: 0 });
-    sections.forEach((section) => observer.observe(section));
-    return () => observer.disconnect();
+      if (window.location.hash !== `#${view}`) window.history.replaceState(null, "", `#${view}`);
+    }
+    function onScroll() {
+      if (!animationFrame) animationFrame = window.requestAnimationFrame(syncActiveSection);
+    }
+    animationFrame = window.requestAnimationFrame(syncActiveSection);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+    };
   }, []);
 
   const navigate = useCallback((view) => {
