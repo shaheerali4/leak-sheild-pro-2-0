@@ -73,18 +73,19 @@ export function DashboardView({ history, onLoadScan, onNavigate, result }) {
     <div className="view-stack view-enter">
       <section className="welcome-panel">
         <div>
-          <span className="eyebrow"><ShieldCheck /> Continuous security clarity</span>
-          <h2>Welcome back. Your attack surface is ready for review.</h2>
-          <p>Run a new assessment or continue with the latest verified evidence. LeakShield uses passive, low-impact checks and free public security sources.</p>
+          <span className="eyebrow"><ShieldCheck /> root@leakshield:~$ perimeter --status</span>
+          <h2>THE PERIMETER<br />IS TALKING.</h2>
+          <p>Interrogate the public surface. Trace exposed routes. Correlate weak controls. Every signal stays grounded in observable evidence.</p>
+          <div className="terminal-readout"><span>MODE</span><strong>PASSIVE_RECON</strong><span>PAYLOADS</span><strong>DISABLED</strong><span>INTEL</span><strong>FREE_SOURCES_ONLY</strong></div>
         </div>
-        <button className="primary-button primary-button-large" onClick={() => onNavigate("scan")}><Play /> Start a new scan</button>
+        <button className="primary-button primary-button-large" onClick={() => onNavigate("scan")}><Play /> INITIALIZE OPERATION</button>
       </section>
 
       <section className="metric-grid" aria-label="Security overview">
-        <MetricCard icon={Globe2} label="Assets monitored" value={assetCount} detail={`${assessment.endpoints?.length || 0} endpoints discovered`} tone="blue" />
-        <MetricCard icon={AlertTriangle} label="Critical findings" value={critical} detail={`${high} high priority`} tone="red" />
-        <MetricCard icon={ShieldCheck} label="Security score" value={`${Math.round(securityScore)}%`} detail={result ? `Grade ${result.grade || gradeForScore(securityScore)}` : "Awaiting baseline scan"} tone="green" />
-        <MetricCard icon={Clock3} label="Last scan" value={latestScan ? formatRelativeDate(latestScan) : "Not scanned"} detail={latestScan ? new Date(latestScan).toLocaleString() : "Create your first assessment"} tone="amber" />
+        <MetricCard icon={Globe2} label="HOSTS_OBSERVED" value={assetCount} detail={`${assessment.endpoints?.length || 0} endpoints mapped`} tone="blue" />
+        <MetricCard icon={AlertTriangle} label="CRITICAL_EXPOSURES" value={critical} detail={`${high} high-priority signals`} tone="red" />
+        <MetricCard icon={ShieldCheck} label="DEFENSE_INDEX" value={`${Math.round(securityScore)}%`} detail={result ? `grade::${result.grade || gradeForScore(securityScore)}` : "baseline not established"} tone="green" />
+        <MetricCard icon={Clock3} label="LAST_OPERATION" value={latestScan ? formatRelativeDate(latestScan) : "NO DATA"} detail={latestScan ? new Date(latestScan).toLocaleString() : "initialize first scan"} tone="amber" />
       </section>
 
       <section className="dashboard-grid">
@@ -229,7 +230,7 @@ export function ScanView({
   return (
     <div className="scan-layout view-enter">
       <section className="panel scan-config-panel">
-        <PanelTitle icon={SlidersHorizontal} title="Scan configuration" subtitle="Passive, low-impact checks for authorized targets" />
+        <PanelTitle icon={SlidersHorizontal} title="Target acquisition protocol" subtitle="Passive, low-impact reconnaissance for authorized targets" />
         <div className="mode-selector" role="tablist" aria-label="Scan type">
           <button className={scanMode === "website" ? "selected" : ""} onClick={() => setScanMode("website")}><Globe2 /> Website</button>
           <button className={scanMode === "text" ? "selected" : ""} onClick={() => setScanMode("text")}><FileCode2 /> Text or config</button>
@@ -260,12 +261,12 @@ export function ScanView({
         </div>
         {error && <div className="alert alert-error"><AlertTriangle /> <span><strong>Scan could not complete</strong>{error}</span></div>}
         <button className="primary-button primary-button-large run-scan-button" disabled={loading} onClick={() => onScan({ profile, rate, schedule })}>
-          {loading ? <Loader2 className="spin" /> : <Play />} {loading ? "Assessment running" : "Start security scan"}
+          {loading ? <Loader2 className="spin" /> : <Play />} {loading ? "RECON PROCESS ACTIVE" : "EXECUTE PASSIVE SCAN"}
         </button>
       </section>
 
       <aside className="panel scan-guidance-panel">
-        <PanelTitle icon={ShieldQuestion} title="Before you scan" subtitle="Safe assessment guidance" />
+        <PanelTitle icon={ShieldQuestion} title="Rules of engagement" subtitle="Operational safety boundaries" />
         <ol>
           <li><span>1</span><div><strong>Confirm authorization</strong><p>Only assess a target you own or have written permission to test.</p></div></li>
           <li><span>2</span><div><strong>Use the complete profile</strong><p>It combines crawling, configuration, infrastructure, technology, and exposure checks.</p></div></li>
@@ -282,7 +283,7 @@ export function ScanView({
 function LiveScanProgress() {
   return (
     <section className="panel live-scan-card" aria-live="polite">
-      <div className="live-scan-head"><span className="scan-spinner"><Radar /></span><div><strong>Assessment in progress</strong><small>Collecting public evidence. Keep this page open until the report is ready.</small></div></div>
+      <div className="live-scan-head"><span className="scan-spinner"><Radar /></span><div><strong>Recon process active</strong><small>Collecting public evidence. Keep this console open until the report is assembled.</small></div></div>
       <div className="phase-track">{scanPhases.map((phase, index) => <div key={phase} style={{ "--phase-delay": `${index * .55}s` }}><span><Check /></span><small>{phase}</small></div>)}</div>
       <div className="indeterminate-progress"><span /></div>
     </section>
@@ -484,7 +485,7 @@ export function SettingsView({ theme, onToggleTheme }) {
   const [denseTables, setDenseTables] = useState(() => localStorage.getItem("leakshield.denseTables") === "true");
   function updateMode(event) { setDefaultMode(event.target.value); localStorage.setItem("leakshield.defaultMode", event.target.value); }
   function updateDensity(event) { setDenseTables(event.target.checked); localStorage.setItem("leakshield.denseTables", String(event.target.checked)); document.documentElement.dataset.density = event.target.checked ? "compact" : "comfortable"; }
-  return <div className="settings-stack view-enter"><section className="panel settings-section"><PanelTitle icon={Settings2} title="Appearance" subtitle="Workspace display preferences" /><div className="setting-row"><div><strong>Color theme</strong><p>Light mode is the default for clear, professional reports.</p></div><button className="secondary-button" onClick={onToggleTheme}>{theme === "light" ? "Use dark theme" : "Use light theme"}</button></div><label className="setting-row"><div><strong>Compact tables</strong><p>Reduce row height when reviewing large result sets.</p></div><input type="checkbox" className="switch" checked={denseTables} onChange={updateDensity} /></label></section><section className="panel settings-section"><PanelTitle icon={ScanLineIcon} title="Scan defaults" subtitle="Saved only in this browser" /><label className="setting-row"><div><strong>Default scan type</strong><p>Choose which input opens first on the New Scan page.</p></div><select value={defaultMode} onChange={updateMode}><option value="website">Website</option><option value="text">Text or config</option><option value="project-folder">Project folder</option></select></label></section><section className="panel settings-section"><PanelTitle icon={LockKeyhole} title="Privacy and safety" subtitle="Built-in protections" /><div className="data-list"><DataRow label="Target credentials" value="Never stored" /><DataRow label="Finding values" value="Redacted in reports" /><DataRow label="Paid APIs" value="None required" /><DataRow label="Assessment model" value="Passive and low impact" /></div></section></div>;
+  return <div className="settings-stack view-enter"><section className="panel settings-section"><PanelTitle icon={Settings2} title="Console phosphor" subtitle="Local operator display profile" /><div className="setting-row"><div><strong>Signal colorway</strong><p>Switch between green and amber terminal phosphor.</p></div><button className="secondary-button" onClick={onToggleTheme}>{theme === "light" ? "USE GREEN PHOSPHOR" : "USE AMBER PHOSPHOR"}</button></div><label className="setting-row"><div><strong>Compact tables</strong><p>Reduce row height for dense evidence review.</p></div><input type="checkbox" className="switch" checked={denseTables} onChange={updateDensity} /></label></section><section className="panel settings-section"><PanelTitle icon={ScanLineIcon} title="Operation defaults" subtitle="Saved only in this browser" /><label className="setting-row"><div><strong>Default input vector</strong><p>Choose which assessment input opens first.</p></div><select value={defaultMode} onChange={updateMode}><option value="website">Website</option><option value="text">Text or config</option><option value="project-folder">Project folder</option></select></label></section><section className="panel settings-section"><PanelTitle icon={LockKeyhole} title="Safety protocol" subtitle="Hard-coded operational boundaries" /><div className="data-list"><DataRow label="Target credentials" value="Never stored" /><DataRow label="Finding values" value="Redacted in reports" /><DataRow label="Paid APIs" value="None required" /><DataRow label="Assessment model" value="Passive and low impact" /></div></section></div>;
 }
 
 export function HelpView() { return <div className="view-enter"><KnowledgeBase /></div>; }

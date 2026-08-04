@@ -1,8 +1,6 @@
 import {
-  Bell,
   BookOpen,
   Boxes,
-  ChevronDown,
   CircleHelp,
   DatabaseZap,
   FileClock,
@@ -22,32 +20,32 @@ import {
 } from "lucide-react";
 
 const primaryNavigation = [
-  { id: "dashboard", label: "Dashboard", icon: Gauge },
-  { id: "scan", label: "New Scan", icon: ScanLine, accent: true },
-  { id: "history", label: "Scan History", icon: History },
-  { id: "assets", label: "Assets", icon: Boxes },
-  { id: "findings", label: "Vulnerabilities", icon: FileSearch },
-  { id: "cves", label: "CVE Database", icon: DatabaseZap },
-  { id: "reports", label: "Reports", icon: FileClock }
+  { id: "dashboard", label: "Command Center", code: "00", icon: Gauge },
+  { id: "scan", label: "Initialize Scan", code: "01", icon: ScanLine, accent: true },
+  { id: "history", label: "Operation Log", code: "02", icon: History },
+  { id: "assets", label: "Surface Map", code: "03", icon: Boxes },
+  { id: "findings", label: "Exposures", code: "04", icon: FileSearch },
+  { id: "cves", label: "CVE Intel", code: "05", icon: DatabaseZap },
+  { id: "reports", label: "Report Vault", code: "06", icon: FileClock }
 ];
 
 const secondaryNavigation = [
-  { id: "integrations", label: "Integrations", icon: PlugZap },
-  { id: "settings", label: "Settings", icon: Settings },
-  { id: "help", label: "Help & Docs", icon: CircleHelp }
+  { id: "integrations", label: "Data Uplinks", code: "07", icon: PlugZap },
+  { id: "settings", label: "Console Config", code: "08", icon: Settings },
+  { id: "help", label: "Field Manual", code: "09", icon: CircleHelp }
 ];
 
 const viewTitles = {
-  dashboard: ["Security Dashboard", "A clear view of your current application risk."],
-  scan: ["New Security Scan", "Configure and run a safe assessment."],
-  history: ["Scan History", "Review previous assessments and compare progress."],
-  assets: ["Asset Inventory", "Explore the public surface discovered by LeakShield."],
-  findings: ["Vulnerabilities", "Prioritize findings and inspect exact evidence."],
-  cves: ["CVE Database", "Review official matches for detected software versions."],
-  reports: ["Reports", "Export assessment data for technical and executive teams."],
-  integrations: ["Integrations", "See the free public sources used by the scanner."],
-  settings: ["Settings", "Personalize your workspace and scan defaults."],
-  help: ["Help & Documentation", "Learn how findings are detected and remediated."]
+  dashboard: ["00", "Command Center", "Live posture and attack-surface telemetry."],
+  scan: ["01", "Initialize Scan", "Configure a bounded reconnaissance operation."],
+  history: ["02", "Operation Log", "Replay previous assessments and risk changes."],
+  assets: ["03", "Surface Map", "Inspect every public route, host and technology signal."],
+  findings: ["04", "Exposure Registry", "Exact evidence, impact and remediation intelligence."],
+  cves: ["05", "CVE Intelligence", "Official correlations for observed software versions."],
+  reports: ["06", "Report Vault", "Package assessment evidence for technical and executive review."],
+  integrations: ["07", "Data Uplinks", "Free public intelligence sources connected to the engine."],
+  settings: ["08", "Console Configuration", "Tune the local operator workspace."],
+  help: ["09", "Field Manual", "Learn the weakness, the impact and the defensive response."]
 };
 
 export default function EnterpriseShell({
@@ -63,7 +61,7 @@ export default function EnterpriseShell({
   sidebarCollapsed,
   theme
 }) {
-  const [title, description] = viewTitles[activeView] || viewTitles.dashboard;
+  const [moduleCode, title, description] = viewTitles[activeView] || viewTitles.dashboard;
 
   function navigate(view) {
     onNavigate(view);
@@ -72,6 +70,8 @@ export default function EnterpriseShell({
 
   return (
     <div className={`app-frame ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
+      <div className="console-grid" aria-hidden="true" />
+      <div className="console-grain" aria-hidden="true" />
       <a className="skip-link" href="#main-content">Skip to main content</a>
       {mobileOpen && <button className="sidebar-scrim" aria-label="Close navigation" onClick={() => onMobileOpenChange(false)} />}
       <aside className={`app-sidebar ${mobileOpen ? "sidebar-mobile-open" : ""}`}>
@@ -92,9 +92,9 @@ export default function EnterpriseShell({
         <div className="sidebar-foot">
           <div className="workspace-health">
             <span className="status-dot status-good" />
-            <span><strong>Scanner operational</strong><small>Free public sources</small></span>
+            <span><strong>ENGINE // ONLINE</strong><small>passive mode · no paid APIs</small></span>
           </div>
-          <a className="admin-link" href="/admin"><ShieldCheck /> <span>Admin dashboard</span></a>
+          <a className="admin-link" href="/admin"><ShieldCheck /> <span>ROOT ACCESS</span></a>
         </div>
       </aside>
 
@@ -102,36 +102,34 @@ export default function EnterpriseShell({
         <header className="topbar">
           <div className="topbar-left">
             <button className="icon-button mobile-only" onClick={() => onMobileOpenChange(true)} aria-label="Open navigation"><Menu /></button>
-            <button className="workspace-switcher" type="button">
-              <span className="workspace-avatar">LS</span>
-              <span><strong>LeakShield Workspace</strong><small>Security operations</small></span>
-              <ChevronDown />
-            </button>
+            <div className="workspace-switcher">
+              <span className="workspace-avatar">#</span>
+              <span><strong>root@leakshield</strong><small>:~/blacksite/{activeView}</small></span>
+            </div>
           </div>
           <div className="topbar-actions">
             <div className={`system-status ${loading ? "status-running" : ""}`}>
-              <span />{loading ? "Scan running" : "Systems operational"}
+              <span />{loading ? "OPERATION ACTIVE" : "NODE 01 // SECURE"}
             </div>
             <button className="icon-button" onClick={() => navigate("help")} aria-label="Open help"><BookOpen /></button>
-            <button className="icon-button" onClick={onToggleTheme} aria-label={`Switch to ${theme === "light" ? "dark" : "light"} theme`}><SunMoon /></button>
-            <button className="icon-button notification-button" aria-label="Notifications"><Bell /><span /></button>
-            <div className="user-avatar" aria-label="LeakShield administrator">LA</div>
+            <button className="icon-button" onClick={onToggleTheme} aria-label="Switch console phosphor profile"><SunMoon /></button>
+            <div className="user-avatar" aria-label="LeakShield operator">OP</div>
           </div>
         </header>
 
         <main className="workspace-main" id="main-content">
           <header className="page-heading">
-            <div><p>LeakShield Pro</p><h1>{title}</h1><span>{description}</span></div>
+            <div><p>MODULE_{moduleCode} // LEAKSHIELD_BLACKSITE</p><h1>{title}</h1><span>{description}</span></div>
             {activeView !== "scan" && (
-              <button className="primary-button" onClick={() => navigate("scan")}><Plus /> New scan</button>
+              <button className="primary-button" onClick={() => navigate("scan")}><Plus /> EXECUTE SCAN</button>
             )}
           </header>
           {result && activeView !== "scan" && (
             <div className="active-assessment" role="status">
               <span className="status-dot status-good" />
-              <strong>Active assessment</strong>
+              <strong>ACTIVE_TARGET</strong>
               <span>{result.source_name}</span>
-              <small>{result.finding_count} finding{result.finding_count === 1 ? "" : "s"}</small>
+              <small>[ {result.finding_count} FINDING{result.finding_count === 1 ? "" : "S"} ]</small>
             </div>
           )}
           {children}
@@ -142,7 +140,7 @@ export default function EnterpriseShell({
 }
 
 function NavItems({ activeView, items, onNavigate }) {
-  return items.map(({ accent, icon: Icon, id, label }) => (
+  return items.map(({ accent, code, icon: Icon, id, label }) => (
     <button
       className={`${activeView === id ? "nav-item-active" : ""} ${accent ? "nav-item-accent" : ""}`}
       key={id}
@@ -151,6 +149,7 @@ function NavItems({ activeView, items, onNavigate }) {
       type="button"
     >
       <Icon />
+      <small>{code}</small>
       <span>{label}</span>
     </button>
   ));
@@ -160,7 +159,7 @@ export function BrandMark() {
   return (
     <a className="brand" href="/" aria-label="LeakShield Pro home">
       <span className="brand-shield"><ShieldCheck /></span>
-      <span><strong>LeakShield</strong><small>PRO</small></span>
+      <span><strong>LEAK//SHIELD</strong><small>BLACKSITE</small></span>
     </a>
   );
 }

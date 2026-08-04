@@ -64,7 +64,7 @@ function SecurityWorkspace() {
   const [riskFilter, setRiskFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [theme, setTheme] = useState(() => localStorage.getItem("leakshield.theme") || "light");
+  const [theme, setTheme] = useState(() => localStorage.getItem("leakshield.consoleTheme") || "dark");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem("leakshield.sidebarCollapsed") === "true");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [clientSession] = useState(clientSessionId);
@@ -83,7 +83,7 @@ function SecurityWorkspace() {
   useEffect(() => { refreshHistory().catch(() => {}); }, [refreshHistory]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem("leakshield.theme", theme);
+    localStorage.setItem("leakshield.consoleTheme", theme);
   }, [theme]);
   useEffect(() => {
     document.documentElement.dataset.density = localStorage.getItem("leakshield.denseTables") === "true" ? "compact" : "comfortable";
@@ -253,11 +253,11 @@ function AdminDashboard() {
   if (!token) return (
     <main className="auth-page">
       <form className="auth-card panel" onSubmit={login}>
-        <BrandMark /><div className="auth-icon"><LockKeyhole /></div><span className="eyebrow">Restricted workspace</span><h1>Admin sign in</h1><p>Review redacted scan activity and workspace audit records.</p>
+        <BrandMark /><div className="auth-icon"><LockKeyhole /></div><span className="eyebrow">RESTRICTED // ROOT CHANNEL</span><h1>Operator authentication</h1><p>Authenticate to inspect redacted operation logs and workspace audit records.</p>
         <label className="form-field"><span>Email address</span><input required autoComplete="username" type="email" value={email} onChange={(event) => setEmail(event.target.value)} /></label>
         <label className="form-field"><span>Password</span><input required autoComplete="current-password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} /></label>
         {error && <div className="alert alert-error"><AlertTriangle /><span>{error}</span></div>}
-        <button className="primary-button primary-button-large" disabled={loading}>{loading ? <Loader2 className="spin" /> : <LockKeyhole />} Sign in securely</button>
+        <button className="primary-button primary-button-large" disabled={loading}>{loading ? <Loader2 className="spin" /> : <LockKeyhole />} OPEN ROOT CHANNEL</button>
         <a className="text-button" href="/">Return to public scanner</a>
       </form>
     </main>
@@ -273,7 +273,7 @@ function AdminDashboard() {
     <main className="admin-page">
       <header className="admin-topbar"><BrandMark /><div><button className="secondary-button" onClick={() => loadAudit(token)}><RefreshCw /> Refresh</button><button className="danger-button" onClick={clearRecords}><Trash2 /> Clear audit</button><button className="secondary-button" onClick={logout}>Sign out</button></div></header>
       <div className="admin-content">
-        <header className="page-heading"><div><p>LeakShield Pro</p><h1>Security Review Dashboard</h1><span>Redacted user activity and assessment audit records.</span></div></header>
+        <header className="page-heading"><div><p>ROOT_CHANNEL // AUDIT_NODE</p><h1>Operator Audit Console</h1><span>Redacted user activity and assessment audit records.</span></div></header>
         <section className="metric-grid"><AdminMetric label="Users" value={stats.users} /><AdminMetric label="Scans" value={stats.scans} /><AdminMetric label="Findings" value={stats.findings} /><AdminMetric label="Critical scans" value={stats.critical} /></section>
         {storage && <div className="notice"><Database /><div><strong>{storage.provider === "vercel_blob_private" ? "Private Vercel Blob audit store" : "Memory audit store"}</strong><p>{storage.grouping}</p></div></div>}
         {error && <div className="alert alert-error"><AlertTriangle /><span>{error}</span></div>}

@@ -16,7 +16,7 @@ export default function KnowledgeBase() {
       <aside className="panel knowledge-index">
         <div className="knowledge-intro">
           <span className="knowledge-mark"><BookOpen /></span>
-          <div><h2>Security knowledge base</h2><p>Clear guidance backed by official sources.</p></div>
+          <div><h2>Operator field manual</h2><p>Defensive guidance from official sources.</p></div>
         </div>
         <label className="search-field"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search security topics" /></label>
         <div className="article-index">
@@ -32,7 +32,7 @@ export default function KnowledgeBase() {
       <article className="panel knowledge-article">
         {selected ? (
           <>
-            <header><span className="eyebrow">{selected.category}</span><h2>{selected.title}</h2><p>Beginner-friendly explanations with enough detail for experienced developers.</p></header>
+            <header><span className="eyebrow">INTEL_FILE // {selected.category}</span><h2>{selected.title}</h2><p>Plain-language defensive intelligence with implementation depth for experienced operators.</p></header>
             <KnowledgeSection title="Definition" value={selected.definition} />
             <KnowledgeSection title="Why it matters" value={selected.importance} />
             <KnowledgeSection title="How LeakShield detects it" value={selected.detection} />
