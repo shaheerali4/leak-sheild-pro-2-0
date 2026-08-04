@@ -48,18 +48,18 @@
       ]
     }
   ],
+  "redirects": [
+    {
+      "source": "/admin=true",
+      "destination": "/?_ls_admin_entry=1",
+      "permanent": false
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/:path*",
       "destination": {
         "service": "backend"
-      }
-    },
-    {
-      "source": "^/admin=true$",
-      "destination": {
-        "service": "frontend",
-        "path": "/"
       }
     },
     {

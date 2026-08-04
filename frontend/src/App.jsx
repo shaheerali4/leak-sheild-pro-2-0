@@ -46,7 +46,9 @@ function initialView() {
 }
 
 export default function App() {
-  const isAdminPath = window.location.pathname === "/admin=true";
+  const redirectedAdminEntry = new URLSearchParams(window.location.search).get("_ls_admin_entry") === "1";
+  const isAdminPath = window.location.pathname === "/admin=true" || redirectedAdminEntry;
+  if (redirectedAdminEntry) window.history.replaceState(null, "", "/admin=true");
   if (isAdminPath) return SERVERLESS_FEATURES_ENABLED ? <AdminDashboard /> : <UnavailableAdmin />;
   return <SecurityWorkspace />;
 }
