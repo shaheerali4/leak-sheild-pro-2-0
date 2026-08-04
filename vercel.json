@@ -56,7 +56,7 @@
       }
     },
     {
-      "source": "/admin=true",
+      "source": "^/admin=true$",
       "destination": {
         "service": "frontend"
       }
