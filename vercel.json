@@ -56,6 +56,12 @@
       }
     },
     {
+      "source": "/admin=true",
+      "destination": {
+        "service": "frontend"
+      }
+    },
+    {
       "source": "/",
       "destination": {
         "service": "frontend"
