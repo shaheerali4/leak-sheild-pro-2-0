@@ -6,13 +6,16 @@ from fastapi import HTTPException
 
 from app.engines.assessment.website import (
     _assert_public_url,
+    _aggregate_risk,
     _clean_url,
     _fetch,
     _finding,
     _grade,
     _header_assessment,
     _pinned_request,
+    _public_secret_status,
     _subdomain_assessment,
+    _validated_exposure,
 )
 
 
@@ -24,7 +27,7 @@ def test_header_assessment_reports_missing_controls() -> None:
 
     assert csp["present"] is True
     assert hsts["present"] is False
-    assert hsts["risk"] == "HIGH"
+    assert hsts["risk"] == "MEDIUM"
 
 
 def test_finding_contains_learning_mode_and_official_references() -> None:
@@ -56,6 +59,86 @@ def test_finding_contains_learning_mode_and_official_references() -> None:
     assert "absent" in finding["observed_evidence"]
     assert finding["expected_value"].startswith("Content-Security-Policy:")
     assert finding["detection_method"].startswith("Inspected")
+
+
+def test_advisory_does_not_claim_high_risk() -> None:
+    finding = _finding(
+        "missing-csp",
+        "Missing Content-Security-Policy",
+        "MEDIUM",
+        "headers",
+        "Header was not observed.",
+        "Consider a restrictive policy.",
+        "https://example.com/",
+        confidence=0.99,
+        verification_status="advisory",
+    )
+
+    assert finding["verification_status"] == "advisory"
+    assert finding["risk_level"] == "LOW"
+    assert finding["risk_score"] < 2
+
+
+def test_sensitive_path_requires_matching_content_not_only_http_200() -> None:
+    branded_not_found = {
+        "status": 200,
+        "text": "<title>Page not found</title><p>Return to our homepage</p>",
+        "body_size": 64,
+        "body_magic": "3c68746d6c",
+    }
+    unrelated_page = {
+        "status": 200,
+        "text": "<html><h1>Welcome to the application</h1></html>",
+        "body_size": 52,
+        "body_magic": "3c68746d6c",
+    }
+
+    assert _validated_exposure("/.env", branded_not_found) is None
+    assert _validated_exposure("/.env", unrelated_page) is None
+
+
+def test_sensitive_path_accepts_specific_artifact_signatures() -> None:
+    environment_file = {
+        "status": 200,
+        "text": "DB_HOST=database.internal\nDB_PASSWORD=redacted-value\n",
+        "body_size": 54,
+        "body_magic": "44425f484f5354",
+    }
+    zip_file = {
+        "status": 200,
+        "text": "",
+        "body_size": 2048,
+        "body_magic": "504b030414000000",
+    }
+
+    assert _validated_exposure("/.env", environment_file)
+    assert _validated_exposure("/backup.zip", zip_file)
+
+
+def test_advisories_cannot_dominate_website_grade() -> None:
+    advisories = [
+        _finding(
+            f"advisory-{index}",
+            "Optional hardening",
+            "MEDIUM",
+            "headers",
+            "A defense-in-depth control was not observed.",
+            "Review the control.",
+            "https://example.com/",
+            verification_status="advisory",
+        )
+        for index in range(20)
+    ]
+
+    score, level = _aggregate_risk(advisories)
+    assert score <= 5
+    assert level == "LOW"
+
+
+def test_public_browser_key_is_not_claimed_as_compromised() -> None:
+    assert _public_secret_status("google-api-key") == "advisory"
+    assert _public_secret_status("generic-api-key") == "potential"
+    assert _public_secret_status("private-key-block") == "detected"
 
 
 @pytest.mark.parametrize(("score", "grade"), [(95, "A"), (84, "B"), (72, "C"), (60, "D"), (20, "F")])

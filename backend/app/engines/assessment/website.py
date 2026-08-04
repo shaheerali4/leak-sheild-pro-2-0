@@ -75,19 +75,36 @@ EXPOSURE_PATHS = {
     "/index.php.bak",
     "/site.zip",
 }
-PUBLIC_SURFACE_PATHS = {"/login", "/admin", "/dashboard", "/api/docs", "/docs", "/debug", "/phpinfo.php", "/server-status"}
 HEADER_RULES = (
-    ("content-security-policy", "Content-Security-Policy", "HIGH", "default-src 'self'; object-src 'none'; base-uri 'self'"),
-    ("strict-transport-security", "Strict-Transport-Security", "HIGH", "max-age=31536000; includeSubDomains"),
-    ("x-frame-options", "X-Frame-Options", "MEDIUM", "DENY"),
-    ("x-content-type-options", "X-Content-Type-Options", "MEDIUM", "nosniff"),
+    ("content-security-policy", "Content-Security-Policy", "MEDIUM", "default-src 'self'; object-src 'none'; base-uri 'self'"),
+    ("strict-transport-security", "Strict-Transport-Security", "MEDIUM", "max-age=31536000; includeSubDomains"),
+    ("x-frame-options", "X-Frame-Options", "LOW", "DENY"),
+    ("x-content-type-options", "X-Content-Type-Options", "LOW", "nosniff"),
     ("permissions-policy", "Permissions-Policy", "LOW", "camera=(), microphone=(), geolocation=()"),
     ("referrer-policy", "Referrer-Policy", "LOW", "strict-origin-when-cross-origin"),
     ("cross-origin-opener-policy", "Cross-Origin-Opener-Policy", "MEDIUM", "same-origin"),
     ("cross-origin-embedder-policy", "Cross-Origin-Embedder-Policy", "LOW", "require-corp"),
     ("cross-origin-resource-policy", "Cross-Origin-Resource-Policy", "LOW", "same-origin"),
 )
-SEVERITY_SCORE = {"LOW": 20.0, "MEDIUM": 45.0, "HIGH": 72.0, "CRITICAL": 92.0}
+# Website posture uses bounded deductions rather than CVSS-like numbers. A single
+# best-practice gap must not make an otherwise strong site appear critically unsafe.
+SEVERITY_SCORE = {"LOW": 5.0, "MEDIUM": 18.0, "HIGH": 40.0, "CRITICAL": 70.0}
+MATERIAL_MISSING_HEADERS = {
+    "Content-Security-Policy",
+    "Strict-Transport-Security",
+    "X-Content-Type-Options",
+}
+CONFIRMED_PUBLIC_SECRET_RULES = {
+    "aws-secret-access-key",
+    "github-token",
+    "openai-api-key",
+    "stripe-secret-key",
+    "slack-token",
+    "sendgrid-key",
+    "database-url",
+    "basic-auth-url",
+    "private-key-block",
+}
 logger = logging.getLogger(__name__)
 
 
@@ -235,6 +252,8 @@ async def _fetch(
                     "set_cookies": response.headers.get_list("set-cookie"),
                     "content_type": content_type,
                     "text": text,
+                    "body_size": len(chunks),
+                    "body_magic": bytes(chunks[:16]).hex(),
                     "truncated": len(chunks) > MAX_RESPONSE_BYTES,
                 }
         except httpx.HTTPError as error:
@@ -368,7 +387,13 @@ def _ssl_sync(hostname: str, address: str, port: int) -> dict[str, Any]:
 async def _ssl_assessment(url: str) -> dict[str, Any]:
     parsed = urlparse(url)
     if parsed.scheme != "https":
-        return {"valid": False, "error": "The target does not use HTTPS", "days_remaining": 0, "weak_configuration": True}
+        return {
+            "valid": False,
+            "assessment_status": "detected",
+            "error": "The target does not use HTTPS",
+            "days_remaining": 0,
+            "weak_configuration": True,
+        }
     try:
         safe_url, addresses = await _resolve_public_target(url)
         safe_host = urlparse(safe_url).hostname or ""
@@ -380,10 +405,11 @@ async def _ssl_assessment(url: str) -> dict[str, Any]:
     except (OSError, ssl.SSLError, KeyError, ValueError):
         pass
     return {
-        "valid": False,
-        "error": "TLS negotiation or certificate validation failed",
-        "days_remaining": 0,
-        "weak_configuration": True,
+        "valid": None,
+        "assessment_status": "unavailable",
+        "error": "TLS details could not be independently verified from the scanner network",
+        "days_remaining": None,
+        "weak_configuration": False,
     }
 
 
@@ -498,8 +524,10 @@ def _finding(
     observed_evidence: str | None = None,
     expected_value: str | None = None,
     detection_method: str | None = None,
+    confidence: float = 0.95,
+    verification_status: str = "detected",
 ) -> dict[str, Any]:
-    score = SEVERITY_SCORE[severity]
+    score, risk_level = _calibrated_finding_risk(severity, confidence, verification_status)
     owasp, cwe, capec = mapping_for(category)
     impact = summary
     evidence = observed_evidence or summary
@@ -508,9 +536,15 @@ def _finding(
         "secret_type": title,
         "severity": severity,
         "risk_score": score,
-        "risk_level": severity,
+        "risk_level": risk_level,
         "value_hash": hashlib.sha256(f"{rule_id}:{address}:{evidence}".encode()).hexdigest(),
-        "value_preview": "Verified configuration evidence",
+        "value_preview": (
+            "Confirmed passive evidence"
+            if verification_status == "detected"
+            else "Potential indicator"
+            if verification_status == "potential"
+            else "Hardening advisory"
+        ),
         "line_number": 0,
         "column_start": 0,
         "column_end": 0,
@@ -522,8 +556,8 @@ def _finding(
         "observed_evidence": evidence,
         "expected_value": expected_value or header_value or remediation,
         "detection_method": detection_method or "Passive inspection of the publicly accessible service response.",
-        "confidence": 0.95,
-        "verification_status": "detected",
+        "confidence": confidence,
+        "verification_status": verification_status,
         "owasp": owasp,
         "cwe": cwe,
         "capec": capec,
@@ -553,11 +587,17 @@ def _signal_finding(signal: WebSignal) -> dict[str, Any]:
         observed_evidence=signal.observed_evidence,
         expected_value=signal.expected_value,
         detection_method=signal.detection_method,
+        confidence=signal.confidence,
+        verification_status=signal.status,
     )
     finding.update(
         {
             "value_preview": (
-                "Confirmed passive evidence" if signal.status == "detected" else "Potential indicator"
+                "Confirmed passive evidence"
+                if signal.status == "detected"
+                else "Potential indicator"
+                if signal.status == "potential"
+                else "Hardening advisory"
             ),
             "line_number": signal.line_number,
             "column_start": signal.column_start,
@@ -599,6 +639,145 @@ def _grade(score: float) -> str:
     if score >= 55:
         return "D"
     return "F"
+
+
+def _looks_like_soft_404(text: str) -> bool:
+    sample = re.sub(r"\s+", " ", text[:20_000]).lower()
+    markers = (
+        "404 not found",
+        "404 - page not found",
+        "page not found",
+        "the requested url was not found",
+        "we couldn't find the page",
+        "we can’t find the page",
+        "this page doesn't exist",
+        "this page isn’t available",
+    )
+    return any(marker in sample for marker in markers)
+
+
+def _json_keys(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        return {str(key).lower() for key in value} | {
+            nested
+            for child in value.values()
+            for nested in _json_keys(child)
+        }
+    if isinstance(value, list):
+        return {nested for child in value[:50] for nested in _json_keys(child)}
+    return set()
+
+
+def _validated_exposure(path: str, response: dict[str, Any]) -> tuple[str, float] | None:
+    """Return non-sensitive evidence only when the body matches the requested artifact."""
+    if response.get("status") != 200 or not response.get("body_size"):
+        return None
+    text = response.get("text", "")
+    if text and _looks_like_soft_404(text):
+        return None
+    lower = text[:300_000].lower()
+    magic = response.get("body_magic", "").lower()
+    size = int(response.get("body_size", 0))
+
+    if path in {"/backup.zip", "/site.zip"} and magic.startswith(("504b0304", "504b0506", "504b0708")):
+        return f"The response begins with a ZIP file signature and contains {size} public byte(s).", 0.99
+    if path == "/.DS_Store" and magic.startswith("42756431"):
+        return f"The response begins with the macOS .DS_Store signature and contains {size} public byte(s).", 0.99
+    if path == "/.git/config" and "[core]" in lower and (
+        "repositoryformatversion" in lower or "[remote " in lower
+    ):
+        return "The body contains Git configuration section and repository markers.", 0.99
+    if path == "/.env":
+        assignments = re.findall(
+            r"(?im)^\s*(?:database_url|db_(?:host|name|user|password)|aws_(?:access_key_id|secret_access_key)|"
+            r"api_key|secret_key|app_key|jwt_secret|redis_url)\s*=\s*\S+",
+            text,
+        )
+        if len(assignments) >= 2:
+            return f"The body contains {len(assignments)} environment-style sensitive configuration assignments.", 0.98
+    if path == "/database.sql" and re.search(
+        r"(?im)(?:--\s*(?:mysql|postgresql).*(?:dump|database)|\bcreate\s+table\b|\binsert\s+into\b)",
+        text,
+    ):
+        return "The body contains database dump or SQL schema/data statements.", 0.97
+    if path == "/config.php" and "<?php" in lower and re.search(
+        r"(?i)(?:db_(?:host|name|user|password)|database_url|define\s*\(|\$config)",
+        text,
+    ):
+        return "The body contains PHP source syntax and configuration markers.", 0.97
+    if path == "/web.config" and "<configuration" in lower and re.search(
+        r"(?i)<(?:system\.web|system\.webserver|connectionstrings)\b",
+        text,
+    ):
+        return "The body contains a .NET web.config root and application configuration sections.", 0.98
+    if path == "/config.json":
+        try:
+            keys = _json_keys(json.loads(text))
+        except (json.JSONDecodeError, TypeError):
+            keys = set()
+        sensitive_keys = keys & {
+            "api_key",
+            "apikey",
+            "client_secret",
+            "database_url",
+            "db_password",
+            "jwt_secret",
+            "private_key",
+            "secret_key",
+        }
+        if sensitive_keys:
+            return f"The JSON object contains sensitive configuration key(s): {', '.join(sorted(sensitive_keys))}.", 0.92
+    if path in {"/backup.bak", "/index.php.bak"} and re.search(
+        r"(?i)(?:<\?php|database_url\s*=|db_password\s*=|\bcreate\s+table\b|<configuration\b)",
+        text,
+    ):
+        return "The backup response contains source-code or configuration markers.", 0.9
+    return None
+
+
+def _diagnostic_surface_evidence(path: str, text: str) -> str | None:
+    lower = text[:300_000].lower()
+    if path == "/phpinfo.php" and "phpinfo()" in lower and "php version" in lower:
+        return "The response contains phpinfo output markers including the PHP version table."
+    if path == "/server-status" and "apache server status for" in lower:
+        return "The response contains the Apache mod_status page marker."
+    if path == "/debug" and any(
+        marker in lower
+        for marker in ("werkzeug debugger", "django debug", "debug toolbar", "interactive debugger")
+    ):
+        return "The response contains a recognized production debug interface marker."
+    return None
+
+
+def _calibrated_finding_risk(severity: str, confidence: float, status: str) -> tuple[float, str]:
+    base = SEVERITY_SCORE[severity]
+    if status == "detected":
+        return base, severity
+    multiplier = 0.3 if status == "potential" else 0.08
+    score = round(base * confidence * multiplier, 1)
+    return score, "LOW"
+
+
+def _aggregate_risk(findings: list[dict[str, Any]]) -> tuple[float, str]:
+    confirmed = [item for item in findings if item.get("verification_status") == "detected"]
+    potential = [item["risk_score"] for item in findings if item.get("verification_status") == "potential"]
+    advisory = [item["risk_score"] for item in findings if item.get("verification_status") == "advisory"]
+    if confirmed:
+        highest = max(item["risk_score"] for item in confirmed)
+        density = min(12.0, max(0, len(confirmed) - 1) * 4.0)
+        score = min(100.0, highest + density + min(3.0, sum(advisory)))
+        severity_order = {"LOW": 0, "MEDIUM": 1, "HIGH": 2, "CRITICAL": 3}
+        level = max(confirmed, key=lambda item: severity_order[item["risk_level"]])["risk_level"]
+        return round(score, 1), level
+    score = min(15.0, max(potential, default=0.0)) + min(5.0, sum(advisory))
+    return round(score, 1), "LOW"
+
+
+def _public_secret_status(rule_id: str) -> str:
+    if rule_id == "google-api-key":
+        # Browser-restricted Google keys are commonly designed to be public.
+        return "advisory"
+    return "detected" if rule_id in CONFIRMED_PUBLIC_SECRET_RULES else "potential"
 
 
 class WebsiteAssessmentEngine:
@@ -700,7 +879,6 @@ class WebsiteAssessmentEngine:
             javascript = {"files": [], "endpoints": [], "source_maps": [], "potential_secrets": 0}
             findings = []
             forms: list[dict[str, Any]] = []
-            homepage_hash = hashlib.sha256(homepage["text"].encode()).hexdigest()
             for item in fetched:
                 path = urlparse(item["url"]).path or "/"
                 kind = "javascript" if "javascript" in item["content_type"] or path.endswith(".js") else "page"
@@ -729,75 +907,82 @@ class WebsiteAssessmentEngine:
                     page_signals, page_forms = analyze_html(item["url"], item["status"], item["text"])
                     findings.extend(_signal_finding(signal) for signal in page_signals)
                     forms.extend(page_forms)
-                if path in PUBLIC_SURFACE_PATHS and item["status"] == 200 and item["text"]:
-                    content_hash = hashlib.sha256(item["text"].encode()).hexdigest()
-                    if content_hash != homepage_hash:
-                        sensitive_surface = path in {"/debug", "/phpinfo.php", "/server-status"}
+                if path in {"/debug", "/phpinfo.php", "/server-status"} and item["status"] == 200:
+                    diagnostic_evidence = _diagnostic_surface_evidence(path, item["text"])
+                    if diagnostic_evidence:
                         findings.append(
                             _finding(
                                 f"public-surface-{path.strip('/').replace('/', '-')}",
-                                f"Public application surface discovered at {path}",
-                                "MEDIUM" if sensitive_surface else "LOW",
+                                f"Public diagnostic surface confirmed at {path}",
+                                "HIGH",
                                 "exposure",
-                                (
-                                    "A public diagnostic surface returned distinct content and may disclose operational details."
-                                    if sensitive_surface
-                                    else "A public login, administration, or documentation surface was discovered. Its presence is not automatically a vulnerability."
-                                ),
-                                (
-                                    "Disable production diagnostics or require authorization."
-                                    if sensitive_surface
-                                    else "Confirm that the route is intended, strongly authenticated, rate limited, monitored, and excluded from search indexing where appropriate."
-                                ),
+                                "A recognized diagnostic interface is publicly accessible and may disclose operational details.",
+                                "Disable the production diagnostic interface or require strong authorization and a network allowlist.",
                                 item["url"],
                                 location_type="public_url",
-                                affected_component=f"Public route: {path}",
-                                observed_evidence=(
-                                    f"GET {item['url']} returned HTTP 200 with content type "
-                                    f"{item['content_type'] or 'not declared'} and a response distinct from the homepage."
-                                ),
-                                expected_value=(
-                                    "The route should be absent, access controlled, or intentionally public with documented safeguards."
-                                ),
-                                detection_method=(
-                                    "Requested a bounded list of common application routes and compared successful response fingerprints with the homepage."
-                                ),
+                                affected_component=f"Public diagnostic route: {path}",
+                                observed_evidence=f"GET {item['url']} returned HTTP 200. {diagnostic_evidence}",
+                                expected_value="The diagnostic route should return HTTP 404/403 or require administrator authorization.",
+                                detection_method="Validated the successful response against product-specific diagnostic page markers.",
+                                confidence=0.98,
                             )
                         )
-                if path in EXPOSURE_PATHS and item["status"] == 200 and item["text"]:
-                    content_hash = hashlib.sha256(item["text"].encode()).hexdigest()
-                    if content_hash != homepage_hash:
+                if path in EXPOSURE_PATHS:
+                    exposure = _validated_exposure(path, item)
+                    if exposure:
+                        exposure_evidence, exposure_confidence = exposure
                         findings.append(
                             _finding(
                                 f"public-exposure-{path.strip('/').replace('/', '-')}",
-                                f"Potential public exposure at {path}",
+                                f"Public sensitive artifact confirmed at {path}",
                                 "CRITICAL" if path in {"/.env", "/.git/config", "/database.sql"} else "HIGH",
                                 "exposure",
-                                "A sensitive-looking file path returned distinct public content and requires immediate manual verification.",
-                                "Restrict the path at the web server, remove the artifact from the deployment, and rotate any data it contained.",
+                                "The public response matches the expected structure of a sensitive deployment artifact.",
+                                "Restrict the path at the web server, remove the artifact from the deployment, and rotate any exposed credentials.",
                                 item["url"],
                                 location_type="public_url",
-                                affected_component=f"Public deployment path: {path}",
-                                observed_evidence=(
-                                    f"GET {item['url']} returned HTTP {item['status']} with content type "
-                                    f"{item['content_type'] or 'not declared'} and a distinct "
-                                    f"{len(item['text'].encode('utf-8'))}-byte response body. "
-                                    "The body was not displayed because it may contain sensitive data."
-                                ),
+                                affected_component=f"Public deployment artifact: {path}",
+                                observed_evidence=f"GET {item['url']} returned HTTP 200. {exposure_evidence}",
                                 expected_value="The path should return HTTP 404/403, require authorization, or not exist in the deployment.",
-                                detection_method=(
-                                    "Requested the known sensitive path and compared its response-body fingerprint "
-                                    "with the homepage to reduce false positives."
-                                ),
+                                detection_method="Validated HTTP status, soft-404 markers, content structure, and file signatures without displaying sensitive body content.",
+                                confidence=exposure_confidence,
                             )
                         )
                 if item["text"]:
-                    for detection in self.detector.scan(item["text"]):
+                    detections = self.detector.scan(item["text"])
+                    specific_hashes = {
+                        detection.value_hash
+                        for detection in detections
+                        if detection.rule.rule_id != "generic-api-key"
+                    }
+                    for detection in detections:
+                        if detection.rule.rule_id == "generic-api-key" and detection.value_hash in specific_hashes:
+                            continue
+                        verification_status = _public_secret_status(detection.rule.rule_id)
                         risk = self.risk_engine.score_finding(detection, item["text"], {"website": True, "public": True})
+                        calibrated_score, calibrated_level = _calibrated_finding_risk(
+                            detection.rule.severity,
+                            detection.rule.confidence,
+                            verification_status,
+                        )
                         explanation = self.explainer.explain(detection, risk)
                         explanation.update(
                             {
-                                "business_impact": detection.rule.consequence,
+                                "summary": (
+                                    f"{detection.rule.description} The credential format and public location provide direct exposure evidence."
+                                    if verification_status == "detected"
+                                    else f"A {detection.rule.secret_type} pattern is publicly visible, but active credentials, permissions, and provider restrictions were not verified."
+                                ),
+                                "attacker_impact": (
+                                    detection.rule.attacker_impact
+                                    if verification_status == "detected"
+                                    else f"If the value is active and insufficiently restricted, {detection.rule.attacker_impact.lower()}"
+                                ),
+                                "business_impact": (
+                                    detection.rule.consequence
+                                    if verification_status == "detected"
+                                    else f"Potential impact only: {detection.rule.consequence} Manual provider-side verification is required."
+                                ),
                                 "learning": learning_guide(detection.rule.secret_type, "secrets", detection.rule.consequence, detection.rule.remediation),
                                 "developer_fixes": developer_fixes(),
                             }
@@ -806,10 +991,14 @@ class WebsiteAssessmentEngine:
                         findings.append(
                             {
                                 "rule_id": detection.rule.rule_id,
-                                "secret_type": f"Potential {detection.rule.secret_type}",
+                                "secret_type": (
+                                    detection.rule.secret_type
+                                    if verification_status == "detected"
+                                    else f"Observed {detection.rule.secret_type} pattern"
+                                ),
                                 "severity": detection.rule.severity,
-                                "risk_score": risk.score,
-                                "risk_level": risk.level,
+                                "risk_score": calibrated_score,
+                                "risk_level": calibrated_level,
                                 "value_hash": detection.value_hash,
                                 "value_preview": detection.value_preview,
                                 "line_number": detection.line_number,
@@ -823,7 +1012,12 @@ class WebsiteAssessmentEngine:
                                 "observed_evidence": (
                                     f"{detection.rule.secret_type} pattern matched at response-body line "
                                     f"{detection.line_number}, columns {detection.column_start}-"
-                                    f"{detection.column_end}. Redacted preview: {detection.value_preview}."
+                                    f"{detection.column_end}. Redacted preview: {detection.value_preview}. "
+                                    + (
+                                        "The credential format is specific enough to confirm public exposure."
+                                        if verification_status == "detected"
+                                        else "Whether the value is active, sensitive, and insufficiently restricted cannot be proven passively."
+                                    )
                                 ),
                                 "expected_value": (
                                     "No credential, token, private key, or connection secret should appear "
@@ -834,7 +1028,7 @@ class WebsiteAssessmentEngine:
                                     "the displayed context and value remain redacted."
                                 ),
                                 "confidence": detection.rule.confidence,
-                                "verification_status": "potential",
+                                "verification_status": verification_status,
                                 "owasp": owasp,
                                 "cwe": cwe,
                                 "capec": capec,
@@ -843,14 +1037,18 @@ class WebsiteAssessmentEngine:
                         )
 
             for item in headers:
-                if not item["present"]:
+                if (
+                    not item["present"]
+                    and item["name"] in MATERIAL_MISSING_HEADERS
+                    and not (item["name"] == "Strict-Transport-Security" and parsed.scheme != "https")
+                ):
                     findings.append(
                         _finding(
                             f"missing-{item['name'].lower()}",
                             f"Missing {item['name']}",
                             item["risk"],
                             "headers",
-                            f"The {item['name']} response header is missing from the public homepage.",
+                            f"The {item['name']} response header was not observed on the public homepage. This is a defense-in-depth recommendation, not proof of an exploitable vulnerability.",
                             item["recommendation"],
                             canonical,
                             item["name"],
@@ -866,6 +1064,8 @@ class WebsiteAssessmentEngine:
                                 "Sent a public GET request to the homepage and inspected the returned "
                                 "HTTP response headers case-insensitively."
                             ),
+                            confidence=0.99,
+                            verification_status="advisory",
                         )
                     )
 
@@ -921,6 +1121,8 @@ class WebsiteAssessmentEngine:
                             "Extracted an explicit public software version, created an exact CPE 2.3 name, "
                             "and queried the free NVD CVE API with isVulnerable enabled."
                         ),
+                        confidence=0.82,
+                        verification_status="potential",
                     )
                     finding.update(
                         {
@@ -933,7 +1135,9 @@ class WebsiteAssessmentEngine:
                     )
                     findings.append(finding)
                     cve_count += 1
-            if not ssl_data.get("valid") or ssl_data.get("weak_configuration"):
+            if ssl_data.get("assessment_status") != "unavailable" and (
+                ssl_data.get("valid") is False or ssl_data.get("weak_configuration")
+            ):
                 tls_observation = ssl_data.get("error") or (
                     f"Negotiated {ssl_data.get('tls_version') or 'an unknown TLS version'} with cipher "
                     f"{ssl_data.get('cipher') or 'unknown'} at "
@@ -1009,20 +1213,27 @@ class WebsiteAssessmentEngine:
                             "Resolved the domain's public MX records, then queried the _dmarc TXT record "
                             "and checked for a DMARC policy."
                         ),
+                        confidence=0.95,
+                        verification_status="advisory",
                     )
                 )
 
             deduped = {f"{item['rule_id']}:{item.get('source_address')}:{item['value_hash']}": item for item in findings}
             findings = sorted(deduped.values(), key=lambda item: item["risk_score"], reverse=True)[:500]
             coverage = coverage_matrix(findings, forms, ports, cve_matches)
-            risks = [item["risk_score"] for item in findings]
-            overall_risk = round(min(100, (max(risks) if risks else 0) + min(10, max(0, len(risks) - 1))), 1)
+            overall_risk, risk_level = _aggregate_risk(findings)
             security_score = round(max(0, 100 - overall_risk), 1)
-            risk_level = RiskEngine.level_for_score(overall_risk)
             grade = _grade(security_score)
+            confirmed_count = sum(item["verification_status"] == "detected" for item in findings)
+            potential_count = sum(item["verification_status"] == "potential" for item in findings)
+            advisory_count = sum(item["verification_status"] == "advisory" for item in findings)
             by_priority = []
             for index, severity in enumerate(("CRITICAL", "HIGH", "MEDIUM", "LOW"), start=1):
-                related = [item for item in findings if item["risk_level"] == severity]
+                related = [
+                    item
+                    for item in findings
+                    if item["risk_level"] == severity and item["verification_status"] != "advisory"
+                ]
                 if related:
                     by_priority.append(
                         {
@@ -1062,21 +1273,33 @@ class WebsiteAssessmentEngine:
                 "grade": grade,
                 "findings": findings,
                 "finding_count": len(findings),
-                "public_exposure_count": sum(item.get("public_accessible", False) for item in findings),
+                "confirmed_finding_count": confirmed_count,
+                "potential_finding_count": potential_count,
+                "advisory_count": advisory_count,
+                "public_exposure_count": sum(
+                    item.get("public_accessible", False) and item["verification_status"] == "detected"
+                    for item in findings
+                ),
                 "mode": "website",
                 "scanned_files": len(fetched),
                 "scanned_addresses": endpoint_urls,
                 "skipped_addresses": sorted(queue - seen)[:20],
                 "recommendation": {
                     "priority": risk_level,
-                    "summary": f"Grade {grade} ({security_score}/100). Address the highest-risk public findings first, then harden preventive controls.",
+                    "summary": (
+                        f"Grade {grade} ({security_score}/100). {confirmed_count} confirmed, "
+                        f"{potential_count} needing verification, and {advisory_count} advisory signal(s)."
+                    ),
                     "actions": [item["explanation"]["remediation"] for item in findings[:5]],
                     "exposed_addresses": list(dict.fromkeys(item["source_address"] for item in findings[:8])),
                 },
                 "advisor": {
                     "overall_grade": grade,
                     "risk_score": overall_risk,
-                    "executive_summary": f"LeakShield assessed {len(endpoint_urls)} public endpoint(s) and identified {len(findings)} prioritized security finding(s).",
+                    "executive_summary": (
+                        f"LeakShield assessed {len(endpoint_urls)} public endpoint(s): {confirmed_count} confirmed finding(s), "
+                        f"{potential_count} signal(s) needing verification, and {advisory_count} hardening advisory item(s)."
+                    ),
                     "technical_summary": "Assessment covered HTTP headers, cookies, CORS, TLS, DNS, bounded ports, Certificate Transparency subdomains, forms, technology and exact-version CVE fingerprints, JavaScript, public files, and exposed secret patterns.",
                     "business_impact": findings[0]["explanation"]["business_impact"] if findings else "No material public weakness was identified in the tested surface.",
                     "likelihood": "High" if overall_risk >= 65 else "Medium" if overall_risk >= 35 else "Low",

@@ -73,6 +73,36 @@ def test_cookie_values_are_redacted_and_cors_reflection_is_detected() -> None:
     assert "redacted" in cookie.observed_evidence.lower()
 
 
+def test_public_cors_and_non_session_cookie_are_advisories() -> None:
+    signals = analyze_headers(
+        "https://example.com/public.json",
+        200,
+        {},
+        ["preference=dark; Path=/"],
+        {"Access-Control-Allow-Origin": "*"},
+    )
+
+    cors = next(signal for signal in signals if signal.rule_id == "cors-wildcard-origin")
+    cookie = next(signal for signal in signals if signal.rule_id == "weak-cookie-preference")
+    assert cors.status == "advisory"
+    assert cors.severity == "LOW"
+    assert cookie.status == "advisory"
+
+
+def test_session_cookie_without_security_attributes_requires_verification() -> None:
+    signals = analyze_headers(
+        "https://example.com/",
+        200,
+        {},
+        ["session_id=redacted; Path=/"],
+        {},
+    )
+
+    cookie = next(signal for signal in signals if signal.rule_id == "weak-cookie-session-id")
+    assert cookie.status == "potential"
+    assert cookie.severity == "MEDIUM"
+
+
 def test_present_but_weak_security_headers_are_reported() -> None:
     signals = analyze_headers(
         "https://example.com/",

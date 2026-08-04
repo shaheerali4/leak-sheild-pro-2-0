@@ -128,6 +128,9 @@ class ScanResponse(BaseModel):
     security_score: float | None = None
     grade: str | None = None
     public_exposure_count: int = 0
+    confirmed_finding_count: int = 0
+    potential_finding_count: int = 0
+    advisory_count: int = 0
     scanned_files: int = 1
     scanned_addresses: list[str] = Field(default_factory=list)
     skipped_addresses: list[str] = Field(default_factory=list)

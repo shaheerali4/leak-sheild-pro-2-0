@@ -351,7 +351,7 @@ def analyze_headers(
                 f"A minimized header without a precise software version, or no {name} header where unnecessary.",
                 "Inspected the public HTTP response headers.",
                 confidence=0.99,
-                status="detected",
+                status="advisory",
             )
         )
 
@@ -360,10 +360,10 @@ def analyze_headers(
         signals.append(
             WebSignal(
                 "clickjacking-protection-missing",
-                "Clickjacking protection missing",
-                "MEDIUM",
+                "Clickjacking hardening not observed",
+                "LOW",
                 "headers",
-                "Neither X-Frame-Options nor CSP frame-ancestors protects the page from framing.",
+                "Neither X-Frame-Options nor CSP frame-ancestors was observed. This is a hardening gap, not proof that a sensitive action is frameable.",
                 "Set CSP frame-ancestors 'none' or an explicit allowlist, with X-Frame-Options as legacy defense in depth.",
                 url,
                 "http_response_header",
@@ -372,7 +372,7 @@ def analyze_headers(
                 "Content-Security-Policy: frame-ancestors 'none' (or an explicit trusted allowlist).",
                 "Inspected both modern CSP and legacy framing controls on the homepage response.",
                 confidence=0.98,
-                status="detected",
+                status="advisory",
             )
         )
 
@@ -397,7 +397,7 @@ def analyze_headers(
                 "A restrictive policy without unsafe-eval or broad script/default source wildcards.",
                 "Parsed security-relevant CSP source expressions from the public homepage response.",
                 confidence=0.98,
-                status="detected",
+                status="advisory",
             )
         )
 
@@ -420,7 +420,7 @@ def analyze_headers(
                     "Strict-Transport-Security: max-age=31536000; includeSubDomains",
                     "Parsed max-age from the public HSTS response header.",
                     confidence=0.99,
-                    status="detected",
+                    status="advisory",
                 )
             )
 
@@ -441,7 +441,7 @@ def analyze_headers(
                 "X-Content-Type-Options: nosniff",
                 "Compared the normalized public header value with the browser-supported value.",
                 confidence=0.99,
-                status="detected",
+                status="advisory",
             )
         )
 
@@ -462,7 +462,7 @@ def analyze_headers(
                 "X-Frame-Options: DENY (or SAMEORIGIN when framing is required).",
                 "Compared the normalized public header value with supported framing directives.",
                 confidence=0.98,
-                status="detected",
+                status="advisory",
             )
         )
 
@@ -486,17 +486,17 @@ def analyze_headers(
                 "Only explicitly trusted origins should receive CORS access.",
                 "Sent one benign GET request with a synthetic Origin header and inspected the CORS response headers.",
                 confidence=0.96,
-                status="detected",
+                status="detected" if credentials else "potential",
             )
         )
     elif allow_origin == "*":
         signals.append(
             WebSignal(
                 "cors-wildcard-origin",
-                "CORS allows every origin",
-                "MEDIUM",
+                "Public resource uses wildcard CORS",
+                "LOW",
                 "headers",
-                "The response permits cross-origin reads from any website.",
+                "The response permits cross-origin reads from any website. This can be intentional for public, non-sensitive resources.",
                 "Replace the wildcard with a minimal origin allowlist unless the resource is intentionally public and non-sensitive.",
                 url,
                 "http_response_header",
@@ -505,7 +505,7 @@ def analyze_headers(
                 "An explicit allowlist for sensitive or user-specific resources.",
                 "Sent one benign cross-origin GET and inspected Access-Control-Allow-Origin.",
                 confidence=0.95,
-                status="detected",
+                status="advisory",
             )
         )
 
@@ -516,13 +516,18 @@ def analyze_headers(
         missing = [item for item in ("secure", "httponly", "samesite") if item not in attributes]
         if not missing:
             continue
+        sensitive_cookie = bool(re.search(r"(?i)(session|sess|auth|token|jwt|sid|login)", name))
         signals.append(
             WebSignal(
                 f"weak-cookie-{re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-') or index}",
                 "Cookie security attributes missing",
-                "MEDIUM",
+                "MEDIUM" if sensitive_cookie else "LOW",
                 "headers",
-                f"Cookie {name} is missing {', '.join(missing)}.",
+                (
+                    f"A session-like cookie named {name} is missing {', '.join(missing)}."
+                    if sensitive_cookie
+                    else f"Cookie {name} is missing {', '.join(missing)}; its purpose is unknown, so this is a hardening observation."
+                ),
                 "Set Secure, HttpOnly, and an appropriate SameSite policy on session and authentication cookies.",
                 url,
                 "http_response_header",
@@ -530,8 +535,8 @@ def analyze_headers(
                 f"Cookie {name} was set without these attributes: {', '.join(missing)}. The value remains redacted.",
                 f"Set-Cookie: {name}=[REDACTED]; Secure; HttpOnly; SameSite=Lax (or Strict/None when justified).",
                 "Parsed every Set-Cookie header without storing or displaying cookie values.",
-                confidence=0.95,
-                status="detected",
+                confidence=0.9 if sensitive_cookie else 0.75,
+                status="potential" if sensitive_cookie else "advisory",
             )
         )
     return signals
@@ -590,7 +595,7 @@ def port_signals(hostname: str, ports: list[dict[str, Any]]) -> list[WebSignal]:
                 "Only required services should be Internet-accessible, preferably behind an allowlist or private network.",
                 "Completed a TCP handshake only, then immediately closed the connection.",
                 confidence=0.98,
-                status="detected",
+                status="potential",
             )
         )
     return signals

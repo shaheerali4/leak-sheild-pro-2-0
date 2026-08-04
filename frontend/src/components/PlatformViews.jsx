@@ -336,7 +336,10 @@ export function FindingsView({ result }) {
   return (
     <div className="view-stack view-enter">
       <section className="finding-summary-grid">
-        {severities.map((level) => <article key={level}><SeverityBadge level={level} /><strong>{result.findings.filter((item) => item.risk_level === level).length}</strong><span>{level.toLowerCase()} findings</span></article>)}
+        <article><StatusBadge status="Confirmed" /><strong>{verificationCount(result, "detected")}</strong><span>directly evidenced</span></article>
+        <article><StatusBadge status="Needs verification" /><strong>{verificationCount(result, "potential")}</strong><span>not claimed as fact</span></article>
+        <article><StatusBadge status="Advisory" /><strong>{verificationCount(result, "advisory")}</strong><span>defense-in-depth</span></article>
+        <article><StatusBadge status="Total signals" /><strong>{result.findings.length}</strong><span>reviewable evidence</span></article>
       </section>
       <section className="panel findings-panel">
         <div className="table-toolbar">
@@ -376,7 +379,7 @@ function FindingTable({ findings, onSelect, result }) {
           <span className="truncate-cell">{finding.file_path || finding.source_address || result.source_name}</span>
           <span className="truncate-cell">{finding.observed_evidence || finding.context_snippet || finding.explanation?.summary}</span>
           <span>{result.created_at ? new Date(result.created_at).toLocaleDateString() : "Current scan"}</span>
-          <span><StatusBadge status="Open" /></span>
+          <span><StatusBadge status={verificationLabel(finding.verification_status)} /></span>
         </button>
       ))}
     </div>
@@ -396,13 +399,13 @@ function FindingDrawer({ finding, onClose, result }) {
       <button className="drawer-backdrop" onClick={onClose} aria-label="Close finding details" />
       <aside className="finding-drawer">
         <header><div><span className="eyebrow">{finding.rule_id}</span><h2>{finding.secret_type}</h2></div><button className="icon-button" onClick={onClose} aria-label="Close"><X /></button></header>
-        <div className="drawer-badges"><SeverityBadge level={finding.risk_level} /><StatusBadge status="Open" />{finding.confidence > 0 && <span className="confidence-badge">{Math.round(finding.confidence * 100)}% confidence</span>}</div>
-        <section className="drawer-section evidence-summary"><h3>Verified evidence</h3><dl><div><dt>Affected location</dt><dd><code>{exactLocation}</code></dd></div><div><dt>Affected component</dt><dd>{finding.affected_component || finding.secret_type}</dd></div><div><dt>Observed</dt><dd>{finding.observed_evidence || finding.context_snippet || explanation.summary}</dd></div><div><dt>Expected secure state</dt><dd>{finding.expected_value || explanation.remediation}</dd></div><div><dt>Detection method</dt><dd>{finding.detection_method || "Pattern and context analysis"}</dd></div></dl></section>
+        <div className="drawer-badges"><SeverityBadge level={finding.risk_level} /><StatusBadge status={verificationLabel(finding.verification_status)} />{finding.confidence > 0 && <span className="confidence-badge">{Math.round(finding.confidence * 100)}% evidence confidence</span>}</div>
+        <section className="drawer-section evidence-summary"><h3>Evidence and scope</h3><dl><div><dt>Affected location</dt><dd><code>{exactLocation}</code></dd></div><div><dt>Affected component</dt><dd>{finding.affected_component || finding.secret_type}</dd></div><div><dt>Observed</dt><dd>{finding.observed_evidence || finding.context_snippet || explanation.summary}</dd></div><div><dt>Conclusion</dt><dd>{verificationExplanation(finding.verification_status)}</dd></div><div><dt>Expected secure state</dt><dd>{finding.expected_value || explanation.remediation}</dd></div><div><dt>Detection method</dt><dd>{finding.detection_method || "Pattern and context analysis"}</dd></div></dl></section>
         <section className="drawer-section"><h3>Impact</h3><p>{explanation.attacker_impact}</p><p>{explanation.business_impact}</p></section>
         <section className="drawer-section"><h3>Recommended remediation</h3><p>{explanation.remediation}</p></section>
         <div className="mapping-row">{[finding.owasp, finding.cwe, finding.capec, finding.cve].filter(Boolean).map((item) => <span key={item}>{item}</span>)}</div>
 
-        {Object.keys(learning).length > 0 && <details className="drawer-accordion" open><summary><ShieldQuestion /> Learning Mode <ChevronDown /></summary><div className="learning-content"><LearningText title="What is this vulnerability?" text={learning.definition} /><LearningText title="Why is it dangerous?" text={learning.why_dangerous} /><LearningText title="How attackers use it" text={learning.attacker_method} /><LearningText title="Generalized example" text={learning.real_world_example} /><LearningText title="Business impact" text={learning.business_impact} /><LearningList title="Common mistakes" items={learning.common_mistakes} /><LearningList title="Step-by-step remediation" items={learning.remediation_steps} ordered /><LearningList title="Prevention checklist" items={learning.prevention_checklist} /></div></details>}
+        {Object.keys(learning).length > 0 && <details className="drawer-accordion" open><summary><ShieldQuestion /> Learning Mode <ChevronDown /></summary><div className="learning-content"><LearningText title="What is this security signal?" text={learning.definition} /><LearningText title="When can it become dangerous?" text={learning.why_dangerous} /><LearningText title="How attackers may use it" text={learning.attacker_method} /><LearningText title="Generalized example" text={learning.real_world_example} /><LearningText title="Potential business impact" text={learning.business_impact} /><LearningList title="Common mistakes" items={learning.common_mistakes} /><LearningList title="Step-by-step remediation" items={learning.remediation_steps} ordered /><LearningList title="Prevention checklist" items={learning.prevention_checklist} /></div></details>}
         {Object.keys(fixes).length > 0 && <details className="drawer-accordion"><summary><Code2 /> Developer Fix Assistant <ChevronDown /></summary><div className="learning-content"><p>{fixes.generic}</p>{Object.entries(fixes.snippets || {}).map(([framework, snippet]) => <CodeSnippet framework={framework} snippet={snippet} key={framework} />)}</div></details>}
         {(learning.references || []).length > 0 && <section className="drawer-section"><h3>Official references</h3><div className="reference-list">{learning.references.map((reference) => <a href={safeHttpUrl(reference.url)} target="_blank" rel="noreferrer" key={reference.url}>{reference.title}<ExternalLink /></a>)}</div></section>}
       </aside>
@@ -471,7 +474,7 @@ export function ReportsView({ result }) {
     { type: "CSV", icon: Database, text: "Finding inventory for spreadsheets", action: () => exportCsv(result) }
   ];
   if (!result) return <PanelEmpty icon={Download} title="No report available" text="Run or open a scan before exporting a report." />;
-  return <div className="view-stack view-enter"><section className="report-hero panel"><div><span className="eyebrow">Latest assessment</span><h2>{result.source_name}</h2><p>{result.finding_count} findings · Grade {result.grade || "-"} · Generated {new Date(result.created_at).toLocaleString()}</p></div><div className="report-grade"><strong>{result.grade || "-"}</strong><span>{result.security_score ?? 0}/100</span></div></section><section className="report-grid">{reports.map(({ action, icon: Icon, text, type }) => <article className="panel" key={type}><span className="report-icon"><Icon /></span><div><h3>{type} report</h3><p>{text}</p></div><button className="secondary-button" onClick={action}><Download /> Export {type}</button></article>)}</section><section className="notice"><ShieldCheck /><div><strong>Privacy-first exports</strong><p>Exports are generated inside your browser from the active scan result. Secret values remain redacted.</p></div></section></div>;
+  return <div className="view-stack view-enter"><section className="report-hero panel"><div><span className="eyebrow">Latest assessment</span><h2>{result.source_name}</h2><p>{verificationCount(result, "detected")} confirmed · {verificationCount(result, "potential")} need verification · {verificationCount(result, "advisory")} advisory · Grade {result.grade || "-"} · Generated {new Date(result.created_at).toLocaleString()}</p></div><div className="report-grade"><strong>{result.grade || "-"}</strong><span>{result.security_score ?? 0}/100</span></div></section><section className="report-grid">{reports.map(({ action, icon: Icon, text, type }) => <article className="panel" key={type}><span className="report-icon"><Icon /></span><div><h3>{type} report</h3><p>{text}</p></div><button className="secondary-button" onClick={action}><Download /> Export {type}</button></article>)}</section><section className="notice"><ShieldCheck /><div><strong>Privacy-first exports</strong><p>Exports are generated inside your browser from the active scan result. Secret values remain redacted.</p></div></section></div>;
 }
 
 export function IntegrationsView({ result }) {
@@ -493,6 +496,9 @@ export function HelpView() { return <div className="view-enter"><KnowledgeBase /
 export function PanelTitle({ action, icon: Icon, subtitle, title }) { return <header className="panel-title"><div className="panel-title-icon"><Icon /></div><div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>{action && <span className="panel-title-action">{action}</span>}</header>; }
 export function SeverityBadge({ level = "LOW" }) { return <span className={`severity-badge severity-${level.toLowerCase()}`}><span />{level}</span>; }
 function StatusBadge({ status }) { return <span className="status-badge"><span />{status}</span>; }
+function verificationLabel(status) { return status === "detected" ? "Confirmed" : status === "potential" ? "Needs verification" : "Advisory"; }
+function verificationExplanation(status) { return status === "detected" ? "The scanner directly observed enough specific evidence to confirm this condition." : status === "potential" ? "The scanner observed an indicator, but cannot prove exploitability or business context without authorized manual verification." : "This is a defense-in-depth recommendation and is not being claimed as an exploitable vulnerability."; }
+function verificationCount(result, status) { const key = status === "detected" ? "confirmed_finding_count" : status === "potential" ? "potential_finding_count" : "advisory_count"; return result?.[key] ?? (result?.findings || []).filter((item) => item.verification_status === status).length; }
 function StatusCode({ status }) { const tone = status >= 200 && status < 300 ? "good" : status >= 300 && status < 400 ? "warn" : "danger"; return <span className={`status-code status-code-${tone}`}>{status || "-"}</span>; }
 function DataRow({ label, value }) { return <div><dt>{label}</dt><dd>{value ?? "Unavailable"}</dd></div>; }
 function EmptyState({ text, title }) { return <div className="empty-state"><FileSearch /><strong>{title}</strong><p>{text}</p></div>; }
