@@ -201,6 +201,9 @@ function MainPage() {
 
   const statusLabel = loading ? "ANALYSIS IN PROGRESS" : result ? "ANALYSIS COMPLETE" : "SYSTEM READY";
   const currentMode = MODES.find((mode) => mode.id === scanMode) || MODES[0];
+  const heroEngineState = loading ? "ARMED" : result ? "ACTIVE" : "STANDBY";
+  const heroRiskState = result?.overall_level || "STANDBY";
+  const heroExposureCount = result ? `${result.finding_count ?? findings.length} exposure signal(s)` : "Awaiting scan vector";
 
   return (
     <div className="app-shell">
@@ -213,20 +216,80 @@ function MainPage() {
           </span>
         </div>
         <div className="topbar-actions">
-          <button className="ghost-button" type="button" onClick={() => document.getElementById("archive")?.scrollIntoView({ behavior: "smooth" })}>Documentation</button>
+          <a className="ghost-button" href="/admin=true">Admin Login</a>
+          <button className="ghost-button" type="button" onClick={() => document.getElementById("scan-panel")?.scrollIntoView({ behavior: "smooth" })}>Documentation</button>
+          <span className="system-pill compact">
+            <Wifi />
+            Engine {heroEngineState}
+          </span>
+          <span className={`system-pill compact risk-${String(heroRiskState).toLowerCase()}`}>
+            <ShieldCheck />
+            Risk {heroRiskState}
+          </span>
           <button className="icon-button" type="button" onClick={() => setTheme((value) => (value === "dark" ? "light" : "dark"))} aria-label="Toggle theme">
             {theme === "dark" ? <SunMedium /> : <MoonStar />}
           </button>
-          <span className="system-pill">
-            <Wifi />
-            System ready
-          </span>
         </div>
       </header>
 
       <main className="workspace">
+        <section className="hero-shell">
+          <div className="hero-copy">
+            <span className="hero-badge">
+              <LockKeyhole />
+              CLASSIFIED-GRADE DEVSECOPS ANALYSIS
+            </span>
+            <div className="hero-copy-inner">
+              <p className="hero-kicker">LEAKSHIELD PRO // PUBLIC EXPOSURE AI</p>
+              <h1>Expose every leak before launch.</h1>
+              <p className="hero-description">
+                Upload a project, inspect a public website, or paste sensitive code. LeakShield maps exposed secrets to
+                exact file and URL addresses, scores operational risk, and returns a mission-ready remediation plan.
+              </p>
+              <div className="hero-actions">
+                <button className="primary-button hero-primary" type="button" onClick={() => document.getElementById("scan-panel")?.scrollIntoView({ behavior: "smooth" })}>
+                  <Sparkles />
+                  Initiate Exposure Sweep
+                </button>
+                <button className="ghost-button hero-secondary" type="button" onClick={refreshHistory}>
+                  <RefreshCw />
+                  Sync Console
+                </button>
+              </div>
+              <div className="hero-stats">
+                <HeroStat label="Mode" value={currentMode.label.toUpperCase()} />
+                <HeroStat label="Session" value={clientSession.slice(0, 8).toUpperCase()} />
+                <HeroStat label="Archive" value={`${history.length} scans`} />
+                <HeroStat label="Exposure" value={heroExposureCount} wide />
+              </div>
+            </div>
+          </div>
+
+          <div className="hero-visual" aria-hidden="true">
+            <div className="hero-radar">
+              <div className="hero-radar-core" />
+              <span className="hero-ring hero-ring-1" />
+              <span className="hero-ring hero-ring-2" />
+              <span className="hero-ring hero-ring-3" />
+              <span className="hero-pulse hero-pulse-1" />
+              <span className="hero-pulse hero-pulse-2" />
+              <span className="hero-pulse hero-pulse-3" />
+            </div>
+            <div className="hero-float hero-float-top">
+              <span className="panel-label">Active scan</span>
+              <strong>{result?.source_name || "No target locked"}</strong>
+              <p>{result ? `${result.finding_count ?? findings.length} finding(s) isolated` : "Awaiting scan vector"}</p>
+            </div>
+            <div className="hero-float hero-float-bottom">
+              <span className="panel-label">Verdict</span>
+              <strong>{result ? `${Math.round(result.overall_score || 0)}/100 ${heroRiskState}` : "0/100 STANDBY"}</strong>
+              <p>{result ? `${result.finding_count ?? findings.length} exposure signal(s) isolated` : "0 exposure signal(s) isolated"}</p>
+            </div>
+          </div>
+        </section>
+
         <section className="mission-grid">
-          <article className="panel mission-panel">
+          <article className="panel mission-panel" id="scan-panel">
             <header className="mission-head">
               <div className="mission-kicker">
                 <span className="mission-icon"><ShieldCheck /></span>
@@ -849,6 +912,15 @@ function AdminPage() {
 function Metric({ label, value }) {
   return (
     <div>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function HeroStat({ label, value, wide = false }) {
+  return (
+    <div className={`hero-stat ${wide ? "wide" : ""}`}>
       <span>{label}</span>
       <strong>{value}</strong>
     </div>
