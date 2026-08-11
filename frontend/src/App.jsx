@@ -209,23 +209,25 @@ function MainPage() {
     <div className="app-shell">
       <header className="topbar">
         <div className="brand-lockup">
-          <span className="brand-title">LEAK SHEILD / 2.0</span>
-          <span className="status-chip">
+          <span className="brand-mark">
+            <ShieldCheck />
+          </span>
+          <span>
+            <span className="brand-title">LEAKSHIELD PRO</span>
+            <small className="brand-subtitle">PUBLIC EXPOSURE AI</small>
+          </span>
+        </div>
+        <div className="topbar-center">
+          <span className="status-chip topbar-chip">
             <span className={`status-dot ${loading ? "busy" : "ready"}`} />
-            {statusLabel}
+            Global threat feed online
           </span>
         </div>
         <div className="topbar-actions">
+          <button className="icon-button" type="button" onClick={() => document.getElementById("scan-panel")?.scrollIntoView({ behavior: "smooth" })} aria-label="Focus scan">
+            <Sparkles />
+          </button>
           <a className="ghost-button" href="/admin=true">Admin Login</a>
-          <button className="ghost-button" type="button" onClick={() => document.getElementById("scan-panel")?.scrollIntoView({ behavior: "smooth" })}>Documentation</button>
-          <span className="system-pill compact">
-            <Wifi />
-            Engine {heroEngineState}
-          </span>
-          <span className={`system-pill compact risk-${String(heroRiskState).toLowerCase()}`}>
-            <ShieldCheck />
-            Risk {heroRiskState}
-          </span>
           <button className="icon-button" type="button" onClick={() => setTheme((value) => (value === "dark" ? "light" : "dark"))} aria-label="Toggle theme">
             {theme === "dark" ? <SunMedium /> : <MoonStar />}
           </button>
@@ -235,16 +237,21 @@ function MainPage() {
       <main className="workspace">
         <section className="hero-shell">
           <div className="hero-copy">
-            <span className="hero-badge">
-              <LockKeyhole />
-              CLASSIFIED-GRADE DEVSECOPS ANALYSIS
-            </span>
+            <span className="hero-badge"><LockKeyhole />CLASSIFIED-GRADE FORENSIC AI</span>
             <div className="hero-copy-inner">
-              <p className="hero-kicker">LEAKSHIELD PRO // PUBLIC EXPOSURE AI</p>
-              <h1>Expose every leak before launch.</h1>
+              <p className="hero-kicker">LeakShield Pro // Public exposure AI</p>
+              <h1>
+                Can You
+                <br />
+                Still Trust
+                <br />
+                Your
+                <br />
+                Secrets?
+              </h1>
               <p className="hero-description">
-                Upload a project, inspect a public website, or paste sensitive code. LeakShield maps exposed secrets to
-                exact file and URL addresses, scores operational risk, and returns a mission-ready remediation plan.
+                LeakShield maps exposed secrets to exact file and URL addresses, scores operational risk, and returns a
+                mission-ready remediation plan.
               </p>
               <div className="hero-actions">
                 <button className="primary-button hero-primary" type="button" onClick={() => document.getElementById("scan-panel")?.scrollIntoView({ behavior: "smooth" })}>
@@ -266,14 +273,20 @@ function MainPage() {
           </div>
 
           <div className="hero-visual" aria-hidden="true">
-            <div className="hero-radar">
-              <div className="hero-radar-core" />
-              <span className="hero-ring hero-ring-1" />
-              <span className="hero-ring hero-ring-2" />
-              <span className="hero-ring hero-ring-3" />
-              <span className="hero-pulse hero-pulse-1" />
-              <span className="hero-pulse hero-pulse-2" />
-              <span className="hero-pulse hero-pulse-3" />
+            <div className="hero-globe-shell">
+              <div className="hero-globe">
+                <span className="globe-grid globe-grid-1" />
+                <span className="globe-grid globe-grid-2" />
+                <span className="globe-grid globe-grid-3" />
+                <span className="globe-grid globe-grid-4" />
+                <span className="globe-ring globe-ring-1" />
+                <span className="globe-ring globe-ring-2" />
+                <span className="globe-ring globe-ring-3" />
+                <span className="globe-satellite globe-satellite-1" />
+                <span className="globe-satellite globe-satellite-2" />
+                <span className="globe-satellite globe-satellite-3" />
+                <span className="globe-satellite globe-satellite-4" />
+              </div>
             </div>
             <div className="hero-float hero-float-top">
               <span className="panel-label">Active scan</span>
