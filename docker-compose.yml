@@ -38,8 +38,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://leakshield:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in your local .env file}@postgres:5432/leakshield
       REDIS_URL: redis://redis:6379/0
       CORS_ORIGINS: http://localhost:5173,http://frontend:5173
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ADMIN_ACCOUNTS_JSON: ${ADMIN_ACCOUNTS_JSON:-[]}
       ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET:-}
     ports:
       - "127.0.0.1:8000:8000"

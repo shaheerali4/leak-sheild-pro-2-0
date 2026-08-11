@@ -3,8 +3,11 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 
-process.env.ADMIN_EMAIL = "admin@example.test";
-process.env.ADMIN_PASSWORD = "test-password";
+const TEST_ADMINS = [
+  { email: "shaheer-owner@example.test", password: "first-test-password" },
+  { email: "admin@example.test", password: "second-test-password" }
+];
+process.env.ADMIN_ACCOUNTS_JSON = JSON.stringify(TEST_ADMINS);
 process.env.ADMIN_SESSION_SECRET = "test-session-secret-with-enough-entropy";
 
 const adminHandler = require("../api/admin");
@@ -64,7 +67,7 @@ test("scans the supplied leak sample and stores only a redacted audit summary", 
   assert.equal(records.length, 1);
   assert.equal(records[0].submitted_input.source_name, "sample_leak.txt");
   assert.equal(JSON.stringify(records).includes(content.trim()), false);
-  assert.equal(JSON.stringify(response.body).includes("shaheerthebestcreation"), false);
+  assert.equal(JSON.stringify(response.body).includes(TEST_ADMINS[0].password), false);
   assert.equal(records[0].request_context.network_data, "not_collected");
   assert.notEqual(records[0].session_id, TEST_SESSION);
 });
@@ -98,7 +101,7 @@ test("admin login can read redacted audit records", async () => {
   });
   const login = await invoke(adminHandler, {
     method: "POST",
-    body: { email: process.env.ADMIN_EMAIL, password: process.env.ADMIN_PASSWORD }
+    body: TEST_ADMINS[0]
   });
   assert.equal(login.status, 200);
   assert.ok(login.body.token);
@@ -109,4 +112,17 @@ test("admin login can read redacted audit records", async () => {
   assert.equal(audit.status, 200);
   assert.equal(audit.body.records.length, 1);
   assert.equal(audit.body.users.length, 1);
+});
+
+test("admin login accepts only accounts in the explicit allowlist", async () => {
+  for (const account of TEST_ADMINS) {
+    const login = await invoke(adminHandler, { method: "POST", body: account });
+    assert.equal(login.status, 200);
+  }
+
+  const rejected = await invoke(adminHandler, {
+    method: "POST",
+    body: { email: "removed-admin@example.test", password: "otherwise-valid-password" }
+  });
+  assert.equal(rejected.status, 401);
 });

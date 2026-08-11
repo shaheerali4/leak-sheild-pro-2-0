@@ -32,23 +32,22 @@ class AdminLogin(BaseModel):
 
 
 def _credentials() -> list[tuple[str, str]]:
-    credentials: list[tuple[str, str]] = []
-    for email_key, password_key in (
-        ("ADMIN_EMAIL", "ADMIN_PASSWORD"),
-        ("ADMIN_EXTRA_EMAIL", "ADMIN_EXTRA_PASSWORD"),
-    ):
-        email = os.getenv(email_key, "")
-        password = os.getenv(password_key, "")
-        if email and password:
-            credentials.append((email, password))
-
     try:
-        additional = json.loads(os.getenv("ADMIN_ADDITIONAL_CREDENTIALS", "[]"))
+        configured = json.loads(os.getenv("ADMIN_ACCOUNTS_JSON", "[]"))
     except json.JSONDecodeError:
-        additional = []
-    for item in additional if isinstance(additional, list) else []:
-        if isinstance(item, dict) and item.get("email") and item.get("password"):
-            credentials.append((str(item["email"]), str(item["password"])))
+        return []
+
+    credentials: list[tuple[str, str]] = []
+    seen_emails: set[str] = set()
+    for item in configured if isinstance(configured, list) else []:
+        if not isinstance(item, dict):
+            continue
+        email = str(item.get("email", "")).strip().lower()
+        password = str(item.get("password", ""))
+        if not email or not password or email in seen_emails:
+            continue
+        seen_emails.add(email)
+        credentials.append((email, password))
     return credentials
 
 
@@ -56,8 +55,7 @@ def _session_secret() -> bytes:
     configured = os.getenv("ADMIN_SESSION_SECRET", "")
     if len(configured.encode()) >= 32:
         return configured.encode()
-    seed = "|".join(f"{email}:{password}" for email, password in _credentials())
-    return hashlib.sha256(f"leakshield-admin-session-v1|{seed}".encode()).digest()
+    raise HTTPException(status_code=503, detail="Admin session security is not configured")
 
 
 def _safe_equal(left: str, right: str) -> bool:

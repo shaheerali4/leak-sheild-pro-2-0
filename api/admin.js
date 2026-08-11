@@ -2,52 +2,39 @@ const crypto = require("crypto");
 const { clearAuditRecords, listAuditRecords, listAuditUsers, storageProvider } = require("./_auditStore");
 const { parseJsonBody, rateLimit, safeCredentialEqual, safeStringEqual, setApiSecurityHeaders } = require("./_security");
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-const ADMIN_EXTRA_EMAIL = process.env.ADMIN_EXTRA_EMAIL;
-const ADMIN_EXTRA_PASSWORD = process.env.ADMIN_EXTRA_PASSWORD;
 const SESSION_SECRET =
   process.env.ADMIN_SESSION_SECRET?.length >= 32
     ? process.env.ADMIN_SESSION_SECRET
-    :
-  crypto
-    .createHash("sha256")
-    .update(`leakshield-admin-session:${adminCredentials().map(({ email, password }) => `${email}:${password}`).join("|") || crypto.randomUUID()}`)
-    .digest("hex");
+    : null;
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 const TOKEN_ISSUER = "leakshield-admin";
 
-function appendCredential(credentials, email, password) {
-  if (email && password) credentials.push({ email: String(email), password: String(password) });
-}
-
-function parseAdditionalCredentials() {
-  if (!process.env.ADMIN_ADDITIONAL_CREDENTIALS) return [];
+function adminCredentials() {
   try {
-    const parsed = JSON.parse(process.env.ADMIN_ADDITIONAL_CREDENTIALS);
-    return Array.isArray(parsed)
-      ? parsed
-          .filter((item) => item && typeof item === "object")
-          .map((item) => ({ email: item.email, password: item.password }))
-      : [];
+    const parsed = JSON.parse(process.env.ADMIN_ACCOUNTS_JSON || "[]");
+    if (!Array.isArray(parsed)) return [];
+
+    const seenEmails = new Set();
+    const credentials = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      const email = typeof item.email === "string" ? item.email.trim().toLowerCase() : "";
+      const password = typeof item.password === "string" ? item.password : "";
+      if (!email || !password || seenEmails.has(email)) continue;
+      seenEmails.add(email);
+      credentials.push({ email, password });
+    }
+    return credentials;
   } catch {
     return [];
   }
 }
 
-function adminCredentials() {
-  const credentials = [];
-  appendCredential(credentials, ADMIN_EMAIL, ADMIN_PASSWORD);
-  appendCredential(credentials, ADMIN_EXTRA_EMAIL, ADMIN_EXTRA_PASSWORD);
-  for (const item of parseAdditionalCredentials()) {
-    appendCredential(credentials, item.email, item.password);
-  }
-  return credentials;
-}
-
 function findAdmin(email, password) {
+  const normalizedEmail = typeof email === "string" ? email.trim().toLowerCase() : "";
   return adminCredentials().find(
-    (credential) => safeCredentialEqual(email, credential.email) && safeCredentialEqual(password, credential.password)
+    (credential) =>
+      safeCredentialEqual(normalizedEmail, credential.email) && safeCredentialEqual(password, credential.password)
   );
 }
 
@@ -64,6 +51,7 @@ function base64Url(value) {
 }
 
 function sign(payload) {
+  if (!SESSION_SECRET) return null;
   return crypto.createHmac("sha256", SESSION_SECRET).update(payload).digest("base64url");
 }
 
@@ -82,6 +70,7 @@ function createToken(email) {
 }
 
 function verifyToken(req) {
+  if (!SESSION_SECRET) return null;
   const header = req.headers.authorization || "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
   const [payload, signature] = token.split(".");
@@ -116,7 +105,7 @@ module.exports = async function handler(req, res) {
   if (req.method === "POST") {
     if (!rateLimit(req, res, "admin-login", { limit: 5, windowMs: 15 * 60 * 1000 })) return;
     const credentials = adminCredentials();
-    if (!credentials.length || credentials.some(({ password }) => password.length < 12)) {
+    if (!credentials.length || !SESSION_SECRET || credentials.some(({ password }) => password.length < 12)) {
       return json(res, 503, { detail: "Admin credentials are not configured" });
     }
     let body;

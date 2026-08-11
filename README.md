@@ -42,7 +42,7 @@ Website assessment is defensive and low impact: only public HTTP(S) targets are 
 
 LeakShield does **not** use Shodan and requires no Shodan API key. Website intelligence comes from direct public HTTP/DNS/TLS checks, Certificate Transparency through crt.sh, RDAP, and exact-version NIST NVD queries. These sources are free and no paid API or AI model is required.
 
-The admin API requires `ADMIN_EMAIL` and `ADMIN_PASSWORD`. Setting a separate high-entropy `ADMIN_SESSION_SECRET` is recommended; otherwise session signing is derived from the configured admin credentials. Private audit persistence additionally uses Vercel Blob when its storage variables are available.
+The admin API accepts only accounts listed in `ADMIN_ACCOUNTS_JSON`. A separate high-entropy `ADMIN_SESSION_SECRET` of at least 32 characters is required for session signing. Real credentials belong only in local or deployment environment variables and must never be committed. Private audit persistence additionally uses Vercel Blob when its storage variables are available.
 
 ## Run With Docker
 
