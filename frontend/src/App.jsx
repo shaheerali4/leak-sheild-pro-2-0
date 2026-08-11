@@ -366,7 +366,7 @@ function MainPage() {
                   <span className="archive-time">{formatDate(item.created_at)}</span>
                 </button>
               ))}
-              {!history.length && <EmptyText text="No scan history yet." />}
+              {!history.length && <EmptyState text="No scan history yet." />}
             </div>
           </aside>
         </section>
