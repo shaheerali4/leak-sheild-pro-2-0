@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { clientSessionId, createScan, getScan, listScans } from "./api";
 import EnterpriseShell from "./components/EnterpriseShell";
 import AdminPortal from "./components/AdminPortal";
+import ShieldBootSequence from "./components/ShieldBootSequence";
 import {
   AssetsView, CveView, DashboardView, FindingsView, HelpView, HistoryView,
   IntegrationsView, ReportsView, ScanView, SettingsView
@@ -25,6 +26,7 @@ export default function App() {
 }
 
 function Workspace() {
+  const [showBoot, setShowBoot] = useState(true);
   const [theme, setTheme] = useState(() => localStorage.getItem("leakshield.theme") || "dark");
   const [activeSection, setActiveSection] = useState("dashboard");
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -42,6 +44,17 @@ function Workspace() {
   const [error, setError] = useState("");
   const [clientSession] = useState(clientSessionId);
   const scanStateRef = useRef({ content, projectFiles, scanMode, sourceName, websiteUrl });
+
+  const completeBoot = useCallback(() => {
+    setShowBoot(false);
+  }, []);
+
+  useEffect(() => {
+    if (!showBoot) return undefined;
+    const handleEscape = (event) => { if (event.key === "Escape") completeBoot(); };
+    window.addEventListener("keydown", handleEscape);
+    return () => window.removeEventListener("keydown", handleEscape);
+  }, [completeBoot, showBoot]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -136,6 +149,8 @@ function Workspace() {
   const toggleTheme = () => setTheme((value) => value === "dark" ? "light" : "dark");
 
   return (
+    <>
+    {showBoot && <ShieldBootSequence onComplete={completeBoot} />}
     <EnterpriseShell activeView={activeSection} loading={loading} mobileOpen={mobileOpen}
       onMobileOpenChange={setMobileOpen} onNavigate={navigate}
       onToggleSidebar={() => setSidebarCollapsed((value) => !value)} onToggleTheme={toggleTheme}
@@ -161,6 +176,7 @@ function Workspace() {
       <WorkspaceSection id="settings" code="08" title="Console Configuration" summary="Tune this local operator display and scan defaults."><SettingsView theme={theme} onToggleTheme={toggleTheme} /></WorkspaceSection>
       <WorkspaceSection id="help" code="09" title="Field Manual" summary="Searchable beginner-friendly security knowledge grounded in official sources."><HelpView /></WorkspaceSection>
     </EnterpriseShell>
+    </>
   );
 }
 
