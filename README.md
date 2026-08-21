@@ -2,6 +2,11 @@
 
 LeakShield Pro is a free and open-source cybersecurity assessment platform for public websites, project folders, pasted code, configuration, and CI logs. It combines bounded passive crawling, attack-surface discovery, DNS/TLS/header intelligence, technology and JavaScript analysis, redacted secret detection, context-aware risk scoring, educational guidance, PostgreSQL persistence, Redis caching, and a modern React dashboard.
 
+## Project Documentation
+
+- [Complete start-to-end project documentation](docs/COMPLETE_PROJECT_DOCUMENTATION.md)
+- [One-minute Urdu-English exhibition video script](docs/ONE_MINUTE_VIDEO_SCRIPT.md)
+
 ## Architecture
 
 ```text
@@ -56,7 +61,7 @@ Open:
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:8000/docs
 
-Folder, website, and admin modes are hidden in Docker because they are implemented by the Vercel serverless API.
+Docker and Vercel use the shared FastAPI implementation for text, project-folder, website, history, comparison, and admin workflows.
 
 ## Local Backend
 
@@ -82,6 +87,7 @@ npm run dev
 ```bash
 curl -X POST http://localhost:8000/api/scans \
   -H "Content-Type: application/json" \
+  -H "X-LeakShield-Session: 2d6ecf0c-6497-4c7f-a96f-a14f02422346" \
   -d "{\"content\":\"api_key='prod_live_ci_token_9f2b7c4a6d8e1f0a2b3c4d5e'\\npassword='ProdRootPass2026!'\",\"source_name\":\"deployment.env\"}"
 ```
 
