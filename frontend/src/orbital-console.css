@@ -135,9 +135,9 @@ body {
   order: 1;
   margin-top: 2px;
   color: var(--text);
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: -.025em;
+  font-size: 23px;
+  font-weight: 750;
+  letter-spacing: -.045em;
 }
 
 .mission-topbar .top-navigation { justify-content: center; }

@@ -1,11 +1,10 @@
 import { useEffect } from "react";
 import {
-  Activity, FileSearch, Fingerprint, Gauge, Menu, Moon, ScanLine,
+  Activity, FileSearch, Fingerprint, Menu, Moon, ScanLine,
   ShieldAlert, ShieldCheck, Sun, X
 } from "lucide-react";
 
 const primaryNavigation = [
-  { id: "dashboard", label: "Console", icon: Gauge },
   { id: "scan", label: "Scan", icon: ScanLine },
   { id: "findings", label: "Findings", icon: FileSearch }
 ];
@@ -86,6 +85,6 @@ export default function EnterpriseShell({
 export function BrandMark({ onNavigate }) {
   return <button className="brand" onClick={onNavigate} aria-label="LeakShield Pro security console">
     <span className="brand-shield"><Fingerprint /></span>
-    <span><small>LEAKSHIELD PRO // PUBLIC EXPOSURE AI</small><strong>Orbital Security Console</strong></span>
+    <span><small>PUBLIC EXPOSURE SECURITY AI</small><strong>LEAK SHIELD PRO</strong></span>
   </button>;
 }
