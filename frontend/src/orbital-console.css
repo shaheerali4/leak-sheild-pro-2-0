@@ -666,6 +666,163 @@ body {
 .mobile-navigation nav button:hover { background: rgba(110, 231, 249, .08); color: var(--cyan); }
 .mobile-nav-status { background: rgba(110, 231, 249, .055); color: var(--cyan); }
 
+/* Light mode uses a crisp editorial palette; dark console styling stays isolated above. */
+:root[data-theme="light"] {
+  --ink: #f2f7f7;
+  --ink-raised: #ffffff;
+  --surface: rgba(255, 255, 255, .92);
+  --surface-2: #f5f9f9;
+  --surface-3: #e6eeee;
+  --line: rgba(24, 62, 67, .14);
+  --line-hot: rgba(0, 119, 125, .42);
+  --text: #102b30;
+  --muted: #5b7378;
+  --soft: #789095;
+  --signal: #007b82;
+  --signal-ink: #ffffff;
+  --signal-soft: rgba(0, 123, 130, .08);
+  --cyan: #007b82;
+  --good: #078463;
+  --shadow: 0 18px 50px rgba(35, 70, 74, .11);
+}
+
+:root[data-theme="light"] .orbital-console {
+  background:
+    radial-gradient(circle at 78% 13%, rgba(86, 205, 210, .16), transparent 25%),
+    radial-gradient(circle at 10% 52%, rgba(177, 203, 207, .14), transparent 30%),
+    linear-gradient(145deg, #f8fbfb 0%, #eef5f5 48%, #eaf2f3 100%);
+}
+:root[data-theme="light"] .orbital-grid {
+  background-image:
+    linear-gradient(rgba(31, 83, 89, .055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(31, 83, 89, .05) 1px, transparent 1px);
+}
+:root[data-theme="light"] .global-scanline {
+  background: linear-gradient(90deg, transparent, rgba(0, 123, 130, .28), transparent);
+  box-shadow: 0 0 12px rgba(0, 123, 130, .1);
+  opacity: .28;
+}
+:root[data-theme="light"] .mission-topbar {
+  border-color: rgba(18, 62, 67, .16);
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 12px 34px rgba(34, 71, 76, .11);
+}
+:root[data-theme="light"] .mission-topbar .brand-shield {
+  background: linear-gradient(145deg, #effbfb, #e2f3f3);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .72);
+}
+:root[data-theme="light"] .telemetry-pill,
+:root[data-theme="light"] .mission-topbar .theme-button,
+:root[data-theme="light"] .mission-topbar .mobile-nav-toggle {
+  border-color: rgba(29, 70, 75, .16);
+  background: #f5f9f9;
+  box-shadow: inset 0 1px rgba(255, 255, 255, .9);
+}
+:root[data-theme="light"] .mission-topbar .theme-button:hover,
+:root[data-theme="light"] .mission-topbar .mobile-nav-toggle:hover {
+  border-color: var(--line-hot);
+  background: #eaf5f5;
+  color: var(--cyan);
+}
+:root[data-theme="light"] .secondary-command {
+  border-color: rgba(0, 123, 130, .34);
+  background: rgba(255, 255, 255, .82);
+  box-shadow: 0 7px 20px rgba(34, 71, 76, .08);
+}
+:root[data-theme="light"] .primary-command,
+:root[data-theme="light"] .primary-button {
+  border-color: #007b82;
+  background: linear-gradient(135deg, #008a91, #0b9876);
+  color: #ffffff;
+  box-shadow: 0 9px 24px rgba(0, 123, 130, .18);
+}
+:root[data-theme="light"] .floating-card {
+  border-color: rgba(19, 62, 68, .17);
+  background: rgba(255, 255, 255, .92);
+  box-shadow: 0 16px 36px rgba(27, 59, 64, .14);
+}
+:root[data-theme="light"] .floating-card strong { color: var(--text); }
+:root[data-theme="light"] .floating-card small { color: var(--muted); }
+:root[data-theme="light"] .panel,
+:root[data-theme="light"] .scan-config-panel,
+:root[data-theme="light"] .embedded-history,
+:root[data-theme="light"] .supporting-drawer {
+  border-color: rgba(23, 60, 65, .14);
+  background: rgba(255, 255, 255, .9);
+  box-shadow: 0 16px 42px rgba(38, 69, 73, .09);
+  backdrop-filter: blur(18px);
+}
+:root[data-theme="light"] .mode-selector,
+:root[data-theme="light"] .tab-bar {
+  border-color: rgba(24, 62, 67, .15);
+  background: #edf3f3;
+}
+:root[data-theme="light"] .mode-selector button.selected,
+:root[data-theme="light"] .tab-bar button.active {
+  background: #ffffff;
+  color: var(--cyan);
+  box-shadow: inset 0 0 0 1px rgba(0, 123, 130, .22), 0 3px 10px rgba(35, 70, 74, .08);
+}
+:root[data-theme="light"] .website-scan-row .form-field > div,
+:root[data-theme="light"] .form-field input,
+:root[data-theme="light"] .form-field textarea,
+:root[data-theme="light"] .form-field select,
+:root[data-theme="light"] .search-field input,
+:root[data-theme="light"] .filter-select select,
+:root[data-theme="light"] .setting-row select {
+  border-color: rgba(26, 65, 70, .16);
+  background: #ffffff;
+  color: var(--text);
+  box-shadow: inset 0 1px 2px rgba(34, 66, 70, .045);
+}
+:root[data-theme="light"] .form-field input::placeholder,
+:root[data-theme="light"] .form-field textarea::placeholder,
+:root[data-theme="light"] .search-field input::placeholder { color: #84969a; }
+:root[data-theme="light"] .secondary-button,
+:root[data-theme="light"] .icon-button {
+  border-color: rgba(24, 62, 67, .16);
+  background: #ffffff;
+  color: var(--text);
+  box-shadow: 0 4px 12px rgba(34, 70, 74, .06);
+}
+:root[data-theme="light"] .secondary-button:hover,
+:root[data-theme="light"] .icon-button:hover {
+  border-color: var(--line-hot);
+  background: #f0f8f8;
+  color: var(--cyan);
+}
+:root[data-theme="light"] .finding-category,
+:root[data-theme="light"] .finding-inspector,
+:root[data-theme="light"] .finding-inspector > header,
+:root[data-theme="light"] .table-row,
+:root[data-theme="light"] .article-index button {
+  border-color: rgba(24, 62, 67, .14);
+  background: #ffffff;
+}
+:root[data-theme="light"] .finding-category:hover,
+:root[data-theme="light"] .table-row:hover,
+:root[data-theme="light"] .article-index button:hover,
+:root[data-theme="light"] .article-index button.active { background: #edf8f8; }
+:root[data-theme="light"] .table-row.selected {
+  background: #e7f5f5;
+  box-shadow: inset 3px 0 var(--cyan);
+}
+:root[data-theme="light"] .api-identity-panel { background: #f2f9f9; }
+:root[data-theme="light"] .drawer-section code,
+:root[data-theme="light"] .evidence-summary code {
+  border-color: rgba(24, 62, 67, .15);
+  background: #edf3f3;
+  color: #17383d;
+}
+:root[data-theme="light"] .mobile-navigation {
+  border-color: rgba(24, 62, 67, .16);
+  background: #ffffff;
+  box-shadow: -16px 0 44px rgba(30, 64, 69, .16);
+}
+:root[data-theme="light"] .mobile-navigation nav button.active,
+:root[data-theme="light"] .mobile-navigation nav button:hover,
+:root[data-theme="light"] .mobile-nav-status { background: #edf8f8; color: var(--cyan); }
+
 @keyframes console-scan { from { transform: translateY(-5vh); } to { transform: translateY(110vh); } }
 @keyframes halo-pulse { 50% { opacity: .62; transform: scale(1.07); } }
 @keyframes sphere-drift { to { transform: rotate(360deg); } }
