@@ -1,5 +1,4 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   Activity,
   AlertTriangle,
@@ -61,59 +60,59 @@ const findingGroups = [
 export function DashboardView({ history, onLoadScan, onNavigate, result }) {
   const findings = result?.findings || [];
   const assessment = result?.assessment || {};
-  const critical = findings.filter((item) => item.risk_level === "CRITICAL").length;
-  const high = findings.filter((item) => item.risk_level === "HIGH").length;
-  const assetCount = new Set([
-    ...history.map((item) => item.source_name),
-    ...(assessment.subdomains || []).map((item) => item.hostname)
-  ]).size;
   const securityScore = securityScoreFor(result);
-  const latestScan = result?.created_at || history[0]?.created_at;
+  const grade = result?.grade || (result ? gradeForScore(securityScore) : "-");
+  const confirmed = verificationCount(result, "detected");
+  const gradeLabel = !result ? "Not assessed" : securityScore >= 90 ? "Excellent" : securityScore >= 80 ? "Good" : securityScore >= 70 ? "Fair" : securityScore >= 55 ? "Needs attention" : "Critical";
 
   return (
     <div className="view-stack view-enter">
-      <section className="welcome-panel">
-        <div>
-          <span className="eyebrow"><ShieldCheck /> root@leakshield:~$ perimeter --status</span>
-          <h2>THE PERIMETER<br />IS TALKING.</h2>
-          <p>Map the public attack surface, verify observable weaknesses, and turn every signal into an actionable remediation path.</p>
-          <div className="terminal-readout"><span>MODE</span><strong>PASSIVE_RECON</strong><span>PAYLOADS</span><strong>DISABLED</strong><span>INTEL</span><strong>FREE_SOURCES_ONLY</strong></div>
+      <section className="assessment-summary panel" aria-label="Assessment summary">
+        <div className="score-summary">
+          <span>Security score</span>
+          <div className="score-ring" style={{ "--score": securityScore }}>
+            <strong>{Math.round(securityScore)}</strong><small>/100</small>
+          </div>
         </div>
-        <button className="primary-button primary-button-large" onClick={() => onNavigate("scan")}><Play /> INITIALIZE OPERATION</button>
+        <div className="summary-stat">
+          <span>Grade</span><strong className="grade-label">{gradeLabel}</strong><small>{result ? `Grade ${grade} from observed evidence` : "Run an assessment to establish a baseline"}</small>
+        </div>
+        <div className="summary-stat">
+          <span>Verified findings</span><strong>{confirmed}</strong><small>{findings.length} total reviewable signals</small>
+        </div>
+        <div className="summary-stat summary-metadata">
+          <span>Scan metadata</span>
+          <dl>
+            <div><dt>Target</dt><dd>{result?.source_name || "No target selected"}</dd></div>
+            <div><dt>Completed</dt><dd>{result?.created_at ? new Date(result.created_at).toLocaleString() : "Not available"}</dd></div>
+            <div><dt>Mode</dt><dd>{result?.mode === "website" ? "Public website assessment" : result?.mode || "Passive assessment"}</dd></div>
+          </dl>
+        </div>
+        <div className="summary-stat summary-metadata">
+          <span>Crawl summary</span>
+          <dl>
+            <div><dt>Pages and files</dt><dd>{result?.scanned_files || 0}</dd></div>
+            <div><dt>Endpoints</dt><dd>{assessment.endpoints?.length || 0}</dd></div>
+            <div><dt>Technologies</dt><dd>{assessment.technologies?.length || 0}</dd></div>
+          </dl>
+        </div>
       </section>
 
-      <section className="credibility-strip" aria-label="Assessment principles">
-        <article>
-          <ShieldCheck />
-          <div><strong>EVIDENCE FIRST</strong><span>Findings require specific, repeatable evidence.</span></div>
-        </article>
-        <article>
-          <LockKeyhole />
-          <div><strong>SAFE BY DEFAULT</strong><span>Passive checks only. No exploit payloads or credential guessing.</span></div>
-        </article>
-        <article>
-          <Database />
-          <div><strong>FREE INTELLIGENCE</strong><span>Official and public sources. No paid API required.</span></div>
-        </article>
-      </section>
-
-      <section className="metric-grid" aria-label="Security overview">
-        <MetricCard icon={Globe2} label="HOSTS_OBSERVED" value={assetCount} detail={`${assessment.endpoints?.length || 0} endpoints mapped`} tone="blue" />
-        <MetricCard icon={AlertTriangle} label="CRITICAL_EXPOSURES" value={critical} detail={`${high} high-priority signals`} tone="red" />
-        <MetricCard icon={ShieldCheck} label="DEFENSE_INDEX" value={`${Math.round(securityScore)}%`} detail={result ? `grade::${result.grade || gradeForScore(securityScore)}` : "baseline not established"} tone="green" />
-        <MetricCard icon={Clock3} label="LAST_OPERATION" value={latestScan ? formatRelativeDate(latestScan) : "NO DATA"} detail={latestScan ? new Date(latestScan).toLocaleString() : "initialize first scan"} tone="amber" />
-      </section>
-
-      <section className="dashboard-grid">
-        <RiskDistribution findings={findings} score={result?.overall_score || 0} />
-        <SecurityOverview result={result} onNavigate={onNavigate} />
-        <RecentScans history={history} onLoadScan={onLoadScan} onNavigate={onNavigate} />
-      </section>
-
-      <section className="dashboard-lower-grid">
-        <RoadmapPreview roadmap={result?.roadmap || []} onNavigate={onNavigate} />
-        <CoveragePreview assessment={assessment} />
-      </section>
+      {result ? <>
+        <section className="assessment-context panel">
+          <div><span className="eyebrow">Executive summary</span><h3>{result.source_name}</h3><p>{result.advisor?.executive_summary || "The assessment is complete. Review verified findings and remediation priorities below."}</p></div>
+          <button className="secondary-button" onClick={() => onNavigate("findings")}>Review findings <ArrowUpRight /></button>
+        </section>
+        <section className="dashboard-lower-grid">
+          <RoadmapPreview roadmap={result.roadmap || []} onNavigate={onNavigate} />
+          <CoveragePreview assessment={assessment} />
+        </section>
+      </> : <section className="panel empty-overview">
+        <ShieldCheck />
+        <div><h3>Your security baseline will appear here</h3><p>Start with a website URL above. LeakShield will show only observable evidence and clearly separate confirmed findings from items that need manual verification.</p></div>
+        <button className="primary-button" onClick={() => onNavigate("scan")}><Play /> Start assessment</button>
+      </section>}
+      <RecentScans history={history} onLoadScan={onLoadScan} onNavigate={onNavigate} />
     </div>
   );
 }
@@ -242,19 +241,33 @@ export function ScanView({
   const [rate, setRate] = useState("safe");
   const [schedule, setSchedule] = useState("now");
   const modules = ["Crawler", "Headers", "TLS", "DNS", "Technology", "Secrets", "CVE correlation"];
+  const missingInput = scanMode === "website" ? !websiteUrl.trim() : scanMode === "project-folder" ? projectFiles.length === 0 : !content.trim();
+
+  function submitAssessment(event) {
+    event.preventDefault();
+    if (!loading && !missingInput) onScan({ profile, rate, schedule });
+  }
 
   return (
-    <div className="scan-layout view-enter">
-      <section className="panel scan-config-panel">
-        <PanelTitle icon={SlidersHorizontal} title="Target acquisition protocol" subtitle="Passive, low-impact reconnaissance for authorized targets" />
+    <div className="view-stack view-enter">
+      <form className="panel scan-config-panel" onSubmit={submitAssessment}>
+        <div className="scan-panel-heading">
+          <div><span className="panel-title-icon"><ShieldCheck /></span><span><strong>Choose what you want to assess</strong><small>Safe, low-impact checks for targets you are authorized to review</small></span></div>
+          <span className="safe-scan-badge"><LockKeyhole /> Passive checks only</span>
+        </div>
         <div className="mode-selector" role="tablist" aria-label="Scan type">
-          <button className={scanMode === "website" ? "selected" : ""} onClick={() => setScanMode("website")}><Globe2 /> Website</button>
-          <button className={scanMode === "text" ? "selected" : ""} onClick={() => setScanMode("text")}><FileCode2 /> Text or config</button>
-          <button className={scanMode === "project-folder" ? "selected" : ""} onClick={() => setScanMode("project-folder")}><UploadCloud /> Project folder</button>
+          <button type="button" className={scanMode === "website" ? "selected" : ""} onClick={() => setScanMode("website")}><Globe2 /> Website</button>
+          <button type="button" className={scanMode === "text" ? "selected" : ""} onClick={() => setScanMode("text")}><FileCode2 /> Text or config</button>
+          <button type="button" className={scanMode === "project-folder" ? "selected" : ""} onClick={() => setScanMode("project-folder")}><UploadCloud /> Project folder</button>
         </div>
 
         {scanMode === "website" && (
-          <label className="form-field form-field-large"><span>Target URL</span><div><Link2 /><input value={websiteUrl} onChange={(event) => setWebsiteUrl(event.target.value)} placeholder="https://example.com" inputMode="url" /></div><small>Only scan websites you own or have permission to assess.</small></label>
+          <div className="website-scan-row">
+            <label className="form-field form-field-large"><span className="sr-only">Target URL</span><div><Link2 /><input value={websiteUrl} onChange={(event) => setWebsiteUrl(event.target.value)} placeholder="https://example.com" inputMode="url" autoComplete="url" /></div></label>
+            <button className="primary-button start-scan-button" disabled={loading || missingInput} type="submit">
+              {loading ? <Loader2 className="spin" /> : <Play />} {loading ? "Scanning..." : "Start scan"}
+            </button>
+          </div>
         )}
         {scanMode === "text" && (
           <><label className="form-field"><span>Source name</span><input value={sourceName} onChange={(event) => setSourceName(event.target.value)} placeholder="deployment.env" /></label><label className="form-field"><span>Code, configuration, or logs</span><textarea value={content} onChange={(event) => setContent(event.target.value)} spellCheck="false" /></label></>
@@ -263,33 +276,25 @@ export function ScanView({
           <div className="folder-picker"><UploadCloud /><strong>{projectFiles.length ? `${projectFiles.length} readable files selected` : "Choose a project folder"}</strong><span>Binary and oversized files are skipped automatically.</span><label className="secondary-button">Select folder<input type="file" multiple webkitdirectory="" directory="" onChange={handleFolderUpload} /></label></div>
         )}
 
-        <div className="configuration-grid">
-          <label className="form-field"><span>Assessment profile</span><select value={profile} onChange={(event) => setProfile(event.target.value)}><option value="complete">Complete public assessment</option></select><small>All safe modules stay enabled so important evidence is not missed.</small></label>
-          <label className="form-field"><span>Authentication</span><select disabled><option>Public / logged-out scan</option></select><small>LeakShield never stores target credentials.</small></label>
-          <label className="form-field"><span>Request rate</span><select value={rate} onChange={(event) => setRate(event.target.value)}><option value="safe">Safe and courteous</option></select><small>Bounded automatically by the passive assessment engine.</small></label>
-          <label className="form-field"><span>Schedule</span><select value={schedule} onChange={(event) => setSchedule(event.target.value)}><option value="now">Run now</option></select><small>Scans run immediately on the free serverless deployment.</small></label>
-        </div>
-
-        <div className="module-selector">
-          <span>Included modules</span>
-          <div>{modules.map((module) => <span key={module}><Check /> {module}</span>)}</div>
-          <small>All modules run together for complete coverage. The scanner remains bounded and avoids invasive exploit attempts.</small>
-        </div>
+        <details className="advanced-scan-options">
+          <summary><Settings2 /> Assessment options <ChevronDown /></summary>
+          <div className="configuration-grid">
+            <label className="form-field"><span>Assessment profile</span><select value={profile} onChange={(event) => setProfile(event.target.value)}><option value="complete">Complete public assessment</option></select><small>All safe modules stay enabled so important evidence is not missed.</small></label>
+            <label className="form-field"><span>Authentication</span><select disabled><option>Public / logged-out scan</option></select><small>LeakShield never stores target credentials.</small></label>
+            <label className="form-field"><span>Request rate</span><select value={rate} onChange={(event) => setRate(event.target.value)}><option value="safe">Safe and courteous</option></select><small>Bounded automatically by the passive assessment engine.</small></label>
+            <label className="form-field"><span>Schedule</span><select value={schedule} onChange={(event) => setSchedule(event.target.value)}><option value="now">Run now</option></select><small>Scans run immediately on the free serverless deployment.</small></label>
+          </div>
+          <div className="module-selector">
+            <span>Included modules</span>
+            <div>{modules.map((module) => <span key={module}><Check /> {module}</span>)}</div>
+          </div>
+        </details>
         {error && <div className="alert alert-error"><AlertTriangle /> <span><strong>Scan could not complete</strong>{error}</span></div>}
-        <button className="primary-button primary-button-large run-scan-button" disabled={loading} onClick={() => onScan({ profile, rate, schedule })}>
-          {loading ? <Loader2 className="spin" /> : <Play />} {loading ? "RECON PROCESS ACTIVE" : "EXECUTE PASSIVE SCAN"}
-        </button>
-      </section>
-
-      <aside className="panel scan-guidance-panel">
-        <PanelTitle icon={ShieldQuestion} title="Rules of engagement" subtitle="Operational safety boundaries" />
-        <ol>
-          <li><span>1</span><div><strong>Confirm authorization</strong><p>Only assess a target you own or have written permission to test.</p></div></li>
-          <li><span>2</span><div><strong>Use the complete profile</strong><p>It combines crawling, configuration, infrastructure, technology, and exposure checks.</p></div></li>
-          <li><span>3</span><div><strong>Verify important findings</strong><p>LeakShield provides exact public evidence while avoiding invasive exploit attempts.</p></div></li>
-        </ol>
-        <div className="safety-note"><LockKeyhole /><p><strong>Designed for responsible testing</strong> No credential guessing, injection payloads, authorization bypass, file uploads, or paid APIs.</p></div>
-      </aside>
+        {scanMode !== "website" && <button className="primary-button primary-button-large run-scan-button" disabled={loading || missingInput} type="submit">
+          {loading ? <Loader2 className="spin" /> : <Play />} {loading ? "Scanning..." : "Start assessment"}
+        </button>}
+        <p className="authorization-note">Only assess websites and files you own or have permission to test. LeakShield does not attempt credential guessing or invasive exploitation.</p>
+      </form>
 
       {loading && <LiveScanProgress />}
     </div>
@@ -346,6 +351,10 @@ export function FindingsView({ result }) {
 
   useEffect(() => {
     setOpenGroup(groups[0]?.id || null);
+    setSelectedFinding((current) => {
+      if (current && findings.some((item) => findingKey(item) === findingKey(current))) return current;
+      return groups[0]?.findings[0] || null;
+    });
   }, [result?.id, severity, deferredQuery]);
 
   if (!result) return <PanelEmpty icon={FileSearch} title="No assessment selected" text="Run a scan or open one from history to review vulnerabilities." />;
@@ -363,33 +372,37 @@ export function FindingsView({ result }) {
           <label className="filter-select"><Filter /><select value={severity} onChange={(event) => setSeverity(event.target.value)}><option value="">All severities</option>{severities.map((level) => <option key={level}>{level}</option>)}</select></label>
           <button className="secondary-button" onClick={() => setSortDirection((value) => value === "desc" ? "asc" : "desc")}><ArrowDown /> Severity {sortDirection === "desc" ? "high first" : "low first"}</button>
         </div>
-        <div className="finding-categories">
-          {groups.map((group) => {
-            const expanded = openGroup === group.id;
-            const highest = group.findings.reduce((level, item) => severityOrder[item.risk_level] > severityOrder[level] ? item.risk_level : level, "LOW");
-            return (
-              <section className="finding-category" key={group.id}>
-                <button className="category-banner" aria-expanded={expanded} onClick={() => setOpenGroup(expanded ? null : group.id)}>
-                  <span className="category-icon"><ShieldCheck /></span><span><strong>{group.label}</strong><small>{group.description}</small></span><span className="category-count">{group.findings.length} issue{group.findings.length === 1 ? "" : "s"}</span><SeverityBadge level={highest} /><ChevronDown />
-                </button>
-                {expanded && <FindingTable findings={group.findings} onSelect={setSelectedFinding} result={result} />}
-              </section>
-            );
-          })}
-          {!groups.length && <EmptyState title="No matching findings" text="Try another keyword or severity filter." />}
+        <div className="findings-workspace">
+          <div className="finding-categories">
+            {groups.map((group) => {
+              const expanded = openGroup === group.id;
+              const highest = group.findings.reduce((level, item) => severityOrder[item.risk_level] > severityOrder[level] ? item.risk_level : level, "LOW");
+              return (
+                <section className="finding-category" key={group.id}>
+                  <button className="category-banner" aria-expanded={expanded} onClick={() => setOpenGroup(expanded ? null : group.id)}>
+                    <span className="category-icon"><ShieldCheck /></span><span><strong>{group.label}</strong><small>{group.description}</small></span><span className="category-count">{group.findings.length}</span><SeverityBadge level={highest} /><ChevronDown />
+                  </button>
+                  {expanded && <FindingTable findings={group.findings} onSelect={setSelectedFinding} result={result} selectedFinding={selectedFinding} />}
+                </section>
+              );
+            })}
+            {!groups.length && <EmptyState title="No matching findings" text="Try another keyword or severity filter." />}
+          </div>
+          {selectedFinding
+            ? <FindingInspector finding={selectedFinding} result={result} />
+            : <div className="finding-inspector inspector-empty"><FileSearch /><strong>Select a finding</strong><p>Exact public evidence and remediation guidance will appear here.</p></div>}
         </div>
       </section>
-      {selectedFinding && <FindingDrawer finding={selectedFinding} onClose={() => setSelectedFinding(null)} result={result} />}
     </div>
   );
 }
 
-function FindingTable({ findings, onSelect, result }) {
+function FindingTable({ findings, onSelect, result, selectedFinding }) {
   return (
     <div className="data-table finding-table">
       <div className="table-head"><span>Finding</span><span>Severity</span><span>Asset</span><span>Evidence</span><span>First seen</span><span>Status</span></div>
       {findings.map((finding) => (
-        <button className="table-row" key={findingKey(finding)} onClick={() => onSelect(finding)}>
+        <button className={`table-row ${findingKey(finding) === findingKey(selectedFinding || {}) ? "selected" : ""}`} key={findingKey(finding)} onClick={() => onSelect(finding)}>
           <span className="table-primary"><span className="finding-type-icon"><Fingerprint /></span><span><strong>{finding.secret_type}</strong><small>{finding.credential_provider ? `${finding.credential_provider} // ${finding.rule_id}` : finding.rule_id}</small></span></span>
           <span><SeverityBadge level={finding.risk_level} /></span>
           <span className="truncate-cell">{finding.file_path || finding.source_address || result.source_name}</span>
@@ -402,16 +415,14 @@ function FindingTable({ findings, onSelect, result }) {
   );
 }
 
-function FindingDrawer({ finding, onClose, result }) {
+function FindingInspector({ finding, result }) {
   const explanation = finding.explanation || {};
   const learning = explanation.learning || {};
   const fixes = explanation.developer_fixes || {};
   const exactLocation = findingLocation(finding, result.source_name);
-  return createPortal(
-    <div className="drawer-layer" role="dialog" aria-modal="true" aria-label={`${finding.secret_type} details`}>
-      <button className="drawer-backdrop" onClick={onClose} aria-label="Close finding details" />
-      <aside className="finding-drawer">
-        <header><div><span className="eyebrow">{finding.rule_id}</span><h2>{finding.secret_type}</h2></div><button className="icon-button" onClick={onClose} aria-label="Close"><X /></button></header>
+  return (
+      <aside className="finding-inspector" aria-label={`${finding.secret_type} details`}>
+        <header><div><span className="eyebrow">{finding.rule_id}</span><h2>{finding.secret_type}</h2></div><StatusBadge status={verificationLabel(finding.verification_status)} /></header>
         <div className="drawer-badges"><SeverityBadge level={finding.risk_level} /><StatusBadge status={verificationLabel(finding.verification_status)} />{finding.confidence > 0 && <span className="confidence-badge">{Math.round(finding.confidence * 100)}% evidence confidence</span>}</div>
         {finding.credential_provider && <section className="drawer-section api-identity-panel"><h3>API credential identity</h3><dl><div><dt>Provider</dt><dd><strong>{finding.credential_provider}</strong></dd></div><div><dt>Credential type</dt><dd>{finding.credential_kind || finding.secret_type}</dd></div>{finding.matched_identifier && <div><dt>Matched assignment</dt><dd><code>{finding.matched_identifier}</code></dd></div>}<div><dt>Redacted fingerprint</dt><dd><code>{finding.value_preview}</code></dd></div><div className="api-scope-note"><dt>What this proves</dt><dd>{finding.provider_scope || "The credential family was identified from its format; permissions and validity require authorized provider-side verification."}</dd></div></dl></section>}
         <section className="drawer-section evidence-summary"><h3>Evidence and scope</h3><dl><div><dt>Affected location</dt><dd><code>{exactLocation}</code></dd></div><div><dt>Affected component</dt><dd>{finding.affected_component || finding.secret_type}</dd></div><div><dt>Observed</dt><dd>{finding.observed_evidence || finding.context_snippet || explanation.summary}</dd></div><div><dt>Conclusion</dt><dd>{verificationExplanation(finding.verification_status)}</dd></div><div><dt>Expected secure state</dt><dd>{finding.expected_value || explanation.remediation}</dd></div><div><dt>Detection method</dt><dd>{finding.detection_method || "Pattern and context analysis"}</dd></div></dl></section>
@@ -424,8 +435,6 @@ function FindingDrawer({ finding, onClose, result }) {
         {Object.keys(fixes).length > 0 && <details className="drawer-accordion"><summary><Code2 /> Developer Fix Assistant <ChevronDown /></summary><div className="learning-content"><p>{fixes.generic}</p>{Object.entries(fixes.snippets || {}).map(([framework, snippet]) => <CodeSnippet framework={framework} snippet={snippet} key={framework} />)}</div></details>}
         {(learning.references || []).length > 0 && <section className="drawer-section"><h3>Official references</h3><div className="reference-list">{learning.references.map((reference) => <a href={safeHttpUrl(reference.url)} target="_blank" rel="noreferrer" key={reference.url}>{reference.title}<ExternalLink /></a>)}</div></section>}
       </aside>
-    </div>,
-    document.body
   );
 }
 
@@ -504,7 +513,7 @@ export function SettingsView({ theme, onToggleTheme }) {
   const [denseTables, setDenseTables] = useState(() => localStorage.getItem("leakshield.denseTables") === "true");
   function updateMode(event) { setDefaultMode(event.target.value); localStorage.setItem("leakshield.defaultMode", event.target.value); }
   function updateDensity(event) { setDenseTables(event.target.checked); localStorage.setItem("leakshield.denseTables", String(event.target.checked)); document.documentElement.dataset.density = event.target.checked ? "compact" : "comfortable"; }
-  return <div className="settings-stack view-enter"><section className="panel settings-section"><PanelTitle icon={Settings2} title="Console phosphor" subtitle="Local operator display profile" /><div className="setting-row"><div><strong>Signal colorway</strong><p>Switch between green and amber terminal phosphor.</p></div><button className="secondary-button" onClick={onToggleTheme}>{theme === "light" ? "USE GREEN PHOSPHOR" : "USE AMBER PHOSPHOR"}</button></div><label className="setting-row"><div><strong>Compact tables</strong><p>Reduce row height for dense evidence review.</p></div><input type="checkbox" className="switch" checked={denseTables} onChange={updateDensity} /></label></section><section className="panel settings-section"><PanelTitle icon={ScanLineIcon} title="Operation defaults" subtitle="Saved only in this browser" /><label className="setting-row"><div><strong>Default input vector</strong><p>Choose which assessment input opens first.</p></div><select value={defaultMode} onChange={updateMode}><option value="website">Website</option><option value="text">Text or config</option><option value="project-folder">Project folder</option></select></label></section><section className="panel settings-section"><PanelTitle icon={LockKeyhole} title="Safety protocol" subtitle="Hard-coded operational boundaries" /><div className="data-list"><DataRow label="Target credentials" value="Never stored" /><DataRow label="Finding values" value="Redacted in reports" /><DataRow label="Paid APIs" value="None required" /><DataRow label="Assessment model" value="Passive and low impact" /></div></section></div>;
+  return <div className="settings-stack view-enter"><section className="panel settings-section"><PanelTitle icon={Settings2} title="Appearance" subtitle="Saved locally in this browser" /><div className="setting-row"><div><strong>Color theme</strong><p>Use the polished light theme or the low-glare dark theme.</p></div><button className="secondary-button" onClick={onToggleTheme}>{theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}</button></div><label className="setting-row"><div><strong>Compact tables</strong><p>Reduce row height when reviewing a large amount of evidence.</p></div><input type="checkbox" className="switch" checked={denseTables} onChange={updateDensity} /></label></section><section className="panel settings-section"><PanelTitle icon={ScanLineIcon} title="Assessment defaults" subtitle="Saved only in this browser" /><label className="setting-row"><div><strong>Default input type</strong><p>Choose which assessment input opens first.</p></div><select value={defaultMode} onChange={updateMode}><option value="website">Website</option><option value="text">Text or config</option><option value="project-folder">Project folder</option></select></label></section><section className="panel settings-section"><PanelTitle icon={LockKeyhole} title="Safety boundaries" subtitle="Built into every assessment" /><div className="data-list"><DataRow label="Target credentials" value="Never stored" /><DataRow label="Finding values" value="Redacted in reports" /><DataRow label="Paid APIs" value="None required" /><DataRow label="Assessment model" value="Passive and low impact" /></div></section></div>;
 }
 
 export function HelpView() { return <div className="view-enter"><KnowledgeBase /></div>; }
