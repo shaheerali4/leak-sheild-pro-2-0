@@ -36,6 +36,7 @@ import {
   ShieldCheck,
   ShieldQuestion,
   SlidersHorizontal,
+  Trash2,
   UploadCloud,
   Waypoints,
   X
@@ -350,13 +351,20 @@ function LiveScanProgress() {
   );
 }
 
-export function HistoryView({ history, loadScan, query, riskFilter, setQuery, setRiskFilter, onNavigate }) {
+export function HistoryView({ clearing, history, loadScan, onClearHistory, query, riskFilter, setQuery, setRiskFilter, onNavigate }) {
+  async function clearHistory() {
+    if (!window.confirm("Permanently delete your scan history from this browser and the server?")) return;
+    await onClearHistory();
+  }
+
   return (
     <section className="panel view-enter">
       <div className="table-toolbar">
         <label className="search-field"><Search /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search targets" /></label>
         <label className="filter-select"><Filter /><select value={riskFilter} onChange={(event) => setRiskFilter(event.target.value)}><option value="">All severities</option>{severities.map((severity) => <option key={severity}>{severity}</option>)}</select></label>
-        <button className="secondary-button" onClick={() => window.location.reload()}><RefreshCw /> Refresh</button>
+        <button className="secondary-button danger-button" disabled={clearing} onClick={clearHistory}>
+          {clearing ? <Loader2 className="spin" /> : <Trash2 />} {clearing ? "Clearing..." : "Clear history"}
+        </button>
       </div>
       <div className="data-table history-table">
         <div className="table-head"><span>Target</span><span>Severity</span><span>Findings</span><span>Score</span><span>Scanned</span><span /></div>

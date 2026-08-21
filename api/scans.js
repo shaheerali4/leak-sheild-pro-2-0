@@ -775,9 +775,13 @@ async function scanWebsite(payload) {
 }
 
 module.exports = async function handler(req, res) {
-  setApiSecurityHeaders(req, res, { methods: "GET,POST,OPTIONS" });
+  setApiSecurityHeaders(req, res, { methods: "GET,POST,DELETE,OPTIONS" });
 
   if (req.method === "OPTIONS") return res.status(204).end();
+  if (req.method === "DELETE") {
+    if (!sessionId(req)) return res.status(400).json({ detail: "A valid X-LeakShield-Session header is required." });
+    return res.status(200).json({ deleted: 0 });
+  }
   if (req.method === "GET") return res.status(200).json([]);
   if (req.method !== "POST") return res.status(405).json({ detail: "Method not allowed" });
   if (!rateLimit(req, res, "scan-create", { limit: 8, windowMs: 10 * 60 * 1000 })) return;

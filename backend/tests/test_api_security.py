@@ -40,6 +40,31 @@ def test_scan_history_is_isolated_between_browser_sessions() -> None:
     assert finding["value_preview"] not in finding["context_snippet"]
 
 
+def test_clear_scan_history_deletes_only_the_current_browser_session() -> None:
+    _rate_requests.clear()
+    with TestClient(app) as client:
+        scan_a = client.post(
+            "/api/scans",
+            headers={"X-LeakShield-Session": SESSION_A},
+            json={"mode": "text", "source_name": "clear-a.env", "content": "safe=true"},
+        )
+        scan_b = client.post(
+            "/api/scans",
+            headers={"X-LeakShield-Session": SESSION_B},
+            json={"mode": "text", "source_name": "keep-b.env", "content": "safe=true"},
+        )
+        cleared = client.delete("/api/scans", headers={"X-LeakShield-Session": SESSION_A})
+        history_a = client.get("/api/scans", headers={"X-LeakShield-Session": SESSION_A})
+        history_b = client.get("/api/scans", headers={"X-LeakShield-Session": SESSION_B})
+
+    assert scan_a.status_code == 201
+    assert scan_b.status_code == 201
+    assert cleared.status_code == 200
+    assert cleared.json()["deleted"] >= 1
+    assert all(item["id"] != scan_a.json()["id"] for item in history_a.json())
+    assert any(item["id"] == scan_b.json()["id"] for item in history_b.json())
+
+
 def test_project_scan_reports_file_relative_location_and_evidence() -> None:
     _rate_requests.clear()
     with TestClient(app) as client:

@@ -90,6 +90,12 @@ test("rejects an empty project scan", async () => {
   assert.match(response.body.detail, /project file/);
 });
 
+test("accepts a session-scoped scan history clear request", async () => {
+  const response = await invoke(scanHandler, { method: "DELETE" });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.deleted, 0);
+});
+
 test("admin login can read redacted audit records", async () => {
   await invoke(scanHandler, {
     method: "POST",

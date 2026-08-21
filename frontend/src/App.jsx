@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { clientSessionId, createScan, getScan, listScans } from "./api";
+import { clearScanHistory, clientSessionId, createScan, getScan, listScans } from "./api";
 import EnterpriseShell from "./components/EnterpriseShell";
 import AdminPortal from "./components/AdminPortal";
 import ShieldBootSequence from "./components/ShieldBootSequence";
@@ -40,6 +40,7 @@ function Workspace() {
   const [historyQuery, setHistoryQuery] = useState("");
   const [historySeverity, setHistorySeverity] = useState("");
   const [loading, setLoading] = useState(false);
+  const [clearingHistory, setClearingHistory] = useState(false);
   const [error, setError] = useState("");
   const [clientSession] = useState(clientSessionId);
   const scanStateRef = useRef({ content, projectFiles, scanMode, sourceName, websiteUrl });
@@ -126,6 +127,21 @@ function Workspace() {
     finally { setLoading(false); }
   }, []);
 
+  const clearHistory = useCallback(async () => {
+    setClearingHistory(true);
+    setError("");
+    try {
+      await clearScanHistory();
+      setHistory([]);
+      setHistoryQuery("");
+      setHistorySeverity("");
+    } catch (clearError) {
+      setError(clearError.message);
+    } finally {
+      setClearingHistory(false);
+    }
+  }, []);
+
   const handleFolderUpload = useCallback(async (event) => {
     const files = Array.from(event.target.files || []);
     let selectedBytes = 0;
@@ -164,8 +180,9 @@ function Workspace() {
             sourceName={sourceName} websiteUrl={websiteUrl} />
           <div className="embedded-history" id="history">
             <header className="embedded-panel-title"><span>HIST-07</span><h2>Mission Archive</h2><p>Reopen a previous security sweep.</p></header>
-            <HistoryView history={history} loadScan={loadScan} query={historyQuery} riskFilter={historySeverity}
-              setQuery={setHistoryQuery} setRiskFilter={setHistorySeverity} onNavigate={navigate} />
+            <HistoryView clearing={clearingHistory} history={history} loadScan={loadScan} onClearHistory={clearHistory}
+              query={historyQuery} riskFilter={historySeverity} setQuery={setHistoryQuery}
+              setRiskFilter={setHistorySeverity} onNavigate={navigate} />
           </div>
         </div>
       </WorkspaceSection>

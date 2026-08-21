@@ -1,13 +1,13 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import desc, select
+from sqlalchemy import delete, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.admin import router as admin_router
 from app.database import get_session
-from app.models import Scan
+from app.models import Finding, Scan
 from app.schemas import ScanHistoryItem, ScanRequest, ScanResponse
 from app.security import enforce_scan_rate_limit, scan_owner_id
 from app.services.scan_service import ScanService
@@ -43,6 +43,23 @@ async def list_scans(
         stmt = stmt.where(Scan.source_name.ilike(f"%{q}%"))
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+@router.delete("/scans")
+async def clear_scans(
+    request: Request,
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, int]:
+    owner_id = scan_owner_id(request)
+    owned_scan_ids = select(Scan.id).where(Scan.owner_id == owner_id)
+    count_result = await session.execute(
+        select(func.count()).select_from(Scan).where(Scan.owner_id == owner_id)
+    )
+    deleted = int(count_result.scalar_one())
+    await session.execute(delete(Finding).where(Finding.scan_id.in_(owned_scan_ids)))
+    await session.execute(delete(Scan).where(Scan.owner_id == owner_id))
+    await session.commit()
+    return {"deleted": deleted}
 
 
 @router.get("/scans/{scan_id}", response_model=ScanResponse)

@@ -86,6 +86,18 @@ export function getScan(id) {
   return request(`/api/scans/${id}`);
 }
 
+export function clearScanHistory() {
+  return request("/api/scans", { method: "DELETE" }).then((result) => {
+    try {
+      localStorage.removeItem(HISTORY_KEY);
+      sessionStorage.removeItem(DETAIL_KEY);
+    } catch {
+      // The server-side history is still cleared when browser storage is unavailable.
+    }
+    return result;
+  });
+}
+
 export function adminLogin(email, password) {
   return request("/api/admin", {
     method: "POST",
