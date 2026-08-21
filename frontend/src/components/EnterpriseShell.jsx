@@ -1,24 +1,13 @@
 import { useEffect } from "react";
 import {
-  Activity, BookOpen, Boxes, ChevronDown, DatabaseZap, FileClock, FileSearch,
-  Fingerprint, Gauge, History, Menu, Moon, PlugZap, ScanLine, Settings,
+  Activity, FileSearch, Fingerprint, Gauge, Menu, Moon, ScanLine,
   ShieldAlert, ShieldCheck, Sun, X
 } from "lucide-react";
 
 const primaryNavigation = [
   { id: "dashboard", label: "Console", icon: Gauge },
   { id: "scan", label: "Scan", icon: ScanLine },
-  { id: "findings", label: "Findings", icon: FileSearch },
-  { id: "assets", label: "Surface", icon: Boxes },
-  { id: "reports", label: "Reports", icon: FileClock },
-  { id: "help", label: "Intel", icon: BookOpen }
-];
-
-const secondaryNavigation = [
-  { id: "history", label: "Mission archive", icon: History },
-  { id: "cves", label: "CVE intelligence", icon: DatabaseZap },
-  { id: "integrations", label: "Data uplinks", icon: PlugZap },
-  { id: "settings", label: "Console settings", icon: Settings }
+  { id: "findings", label: "Findings", icon: FileSearch }
 ];
 
 export default function EnterpriseShell({
@@ -46,8 +35,6 @@ export default function EnterpriseShell({
     onMobileOpenChange(false);
   }
 
-  const allNavigation = [...primaryNavigation, ...secondaryNavigation];
-
   return <div className="app-frame orbital-console">
     <div className="orbital-grid" aria-hidden="true" />
     <div className="global-scanline" aria-hidden="true" />
@@ -59,14 +46,6 @@ export default function EnterpriseShell({
         {primaryNavigation.map(({ id, label }) => (
           <button className={activeView === id ? "active" : ""} key={id} onClick={() => navigate(id)}>{label}</button>
         ))}
-        <details className="more-navigation">
-          <summary>More <ChevronDown /></summary>
-          <div>
-            {secondaryNavigation.map(({ icon: Icon, id, label }) => (
-              <button key={id} onClick={() => navigate(id)}><Icon />{label}</button>
-            ))}
-          </div>
-        </details>
       </nav>
       <div className="topbar-actions">
         <span className="telemetry-pill telemetry-engine"><Activity /><span>Engine</span><strong>{loading ? "ACTIVE" : "ARMED"}</strong></span>
@@ -83,7 +62,7 @@ export default function EnterpriseShell({
       <aside className="mobile-navigation" aria-label="Mobile navigation">
         <header><BrandMark onNavigate={() => navigate("dashboard")} /><button className="icon-button" onClick={() => onMobileOpenChange(false)} aria-label="Close navigation"><X /></button></header>
         <nav>
-          {allNavigation.map(({ icon: Icon, id, label }) => (
+          {primaryNavigation.map(({ icon: Icon, id, label }) => (
             <button className={activeView === id ? "active" : ""} key={id} onClick={() => navigate(id)}><Icon /><span>{label}</span></button>
           ))}
         </nav>

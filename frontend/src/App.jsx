@@ -5,7 +5,7 @@ import AdminPortal from "./components/AdminPortal";
 import ShieldBootSequence from "./components/ShieldBootSequence";
 import {
   AssetsView, CveView, DashboardView, FindingsView, HelpView, HistoryView,
-  IntegrationsView, ReportsView, ScanView, SettingsView
+  ReportsView, ScanView
 } from "./components/PlatformViews";
 
 const DEFAULT_INPUT = `# Paste code, configuration, or deployment logs here.
@@ -16,7 +16,7 @@ environment=review
 scan_target=https://example.com`;
 const MAX_FOLDER_FILE_BYTES = 300_000;
 const MAX_FOLDER_TOTAL_BYTES = 1_200_000;
-const SECTION_IDS = ["dashboard", "scan", "history", "findings", "assets", "cves", "reports", "integrations", "settings", "help"];
+const SECTION_IDS = ["dashboard", "scan", "findings"];
 
 export default function App() {
   const redirectedAdminEntry = new URLSearchParams(window.location.search).get("_ls_admin_entry") === "1";
@@ -86,7 +86,7 @@ function Workspace() {
   }, []);
 
   const navigate = useCallback((sectionId) => {
-    setActiveSection(sectionId);
+    setActiveSection(sectionId === "history" ? "scan" : sectionId);
     document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, []);
 
@@ -169,13 +169,28 @@ function Workspace() {
           </div>
         </div>
       </WorkspaceSection>
-      <WorkspaceSection id="findings" code="INTEL-22" title="Exposure Findings" summary="Grouped security signals with exact evidence and mission-ready remediation."><FindingsView result={result} /></WorkspaceSection>
-      <WorkspaceSection id="assets" code="SURFACE-09" title="Attack Surface" summary="Discovered endpoints, technologies, subdomains, certificates, and network signals."><AssetsView result={result} /></WorkspaceSection>
-      <WorkspaceSection id="cves" code="CVE-11" title="CVE Intelligence" summary="Official NVD correlations shown only when an exact software version is observable."><CveView result={result} /></WorkspaceSection>
-      <WorkspaceSection id="reports" code="REPORT-14" title="Report Vault" summary="Export executive and technical evidence without exposing secret values."><ReportsView result={result} /></WorkspaceSection>
-      <WorkspaceSection id="integrations" code="UPLINK-04" title="Data Uplinks" summary="Transparent public and open-source intelligence powering every assessment."><IntegrationsView result={result} /></WorkspaceSection>
-      <WorkspaceSection id="settings" code="CONFIG-02" title="Console Settings" summary="Tune the display and local assessment defaults."><SettingsView theme={theme} onToggleTheme={toggleTheme} /></WorkspaceSection>
-      <WorkspaceSection id="help" code="KNOW-27" title="Field Intelligence" summary="Beginner-friendly guidance grounded in official security references."><HelpView /></WorkspaceSection>
+      <WorkspaceSection id="findings" code="INTEL-22" title="Exposure Findings" summary="Grouped security signals with exact evidence and mission-ready remediation.">
+        <FindingsView result={result} />
+        <div className="supporting-analysis">
+          <header><span>SUPPORT MODULES</span><h3>Supporting analysis</h3><p>Open these only when deeper technical detail or an export is needed.</p></header>
+          <details className="supporting-drawer">
+            <summary><span><strong>Attack surface</strong><small>Endpoints, technologies, headers, DNS, TLS, and subdomains</small></span><b>Open</b></summary>
+            <div className="supporting-drawer-content"><AssetsView result={result} /></div>
+          </details>
+          <details className="supporting-drawer">
+            <summary><span><strong>CVE intelligence</strong><small>Official NVD matches for reliably detected software versions</small></span><b>Open</b></summary>
+            <div className="supporting-drawer-content"><CveView result={result} /></div>
+          </details>
+          <details className="supporting-drawer">
+            <summary><span><strong>Report exports</strong><small>PDF, HTML, JSON, and CSV assessment reports</small></span><b>Open</b></summary>
+            <div className="supporting-drawer-content"><ReportsView result={result} /></div>
+          </details>
+          <details className="supporting-drawer">
+            <summary><span><strong>Security field guide</strong><small>Beginner-friendly explanations grounded in official references</small></span><b>Open</b></summary>
+            <div className="supporting-drawer-content"><HelpView /></div>
+          </details>
+        </div>
+      </WorkspaceSection>
     </EnterpriseShell>
     </>
   );
