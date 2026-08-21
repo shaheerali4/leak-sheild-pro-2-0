@@ -67,6 +67,19 @@ export function DashboardView({ history, onLoadScan, onNavigate, result }) {
 
   return (
     <div className="view-stack view-enter">
+      <section className="orbital-hero">
+        <div className="orbital-hero-copy">
+          <span className="classification"><LockKeyhole /> Classified-grade DevSecOps analysis</span>
+          <h1>Expose every leak <span>before launch.</span></h1>
+          <p>Inspect a public website, upload a project, or review sensitive configuration. LeakShield maps every observable signal to an exact file or URL address, scores the operational risk, and returns a mission-ready remediation path.</p>
+          <div className="mission-actions">
+            <button className="primary-command" onClick={() => onNavigate("scan")}><ScanLineIcon /> Initiate exposure sweep</button>
+            <button className="secondary-command" onClick={() => onNavigate("history")}><RefreshCw /> Sync console</button>
+          </div>
+        </div>
+        <OrbitalVisual result={result} score={securityScore} />
+      </section>
+
       <section className="assessment-summary panel" aria-label="Assessment summary">
         <div className="score-summary">
           <span>Security score</span>
@@ -112,9 +125,35 @@ export function DashboardView({ history, onLoadScan, onNavigate, result }) {
         <div><h3>Your security baseline will appear here</h3><p>Start with a website URL above. LeakShield will show only observable evidence and clearly separate confirmed findings from items that need manual verification.</p></div>
         <button className="primary-button" onClick={() => onNavigate("scan")}><Play /> Start assessment</button>
       </section>}
-      <RecentScans history={history} onLoadScan={onLoadScan} onNavigate={onNavigate} />
     </div>
   );
+}
+
+function OrbitalVisual({ result, score }) {
+  const riskLevel = result?.overall_level || "STANDBY";
+  const target = result?.source_name || "No target locked";
+  const signals = result?.finding_count ?? result?.findings?.length ?? 0;
+  return <div className="orbit-stage" aria-label="Live security telemetry">
+    <div className="orbit-sphere" style={{ "--orbit-risk": Math.min(100, result?.overall_score || 0) }}>
+      <span className="deep-halo" />
+      <span className="sphere-core" />
+      <span className="wireframe-shell">
+        {Array.from({ length: 12 }, (_, index) => <i className="meridian" style={{ "--i": index }} key={`m-${index}`} />)}
+        {Array.from({ length: 8 }, (_, index) => <i className="latitude" style={{ "--i": index }} key={`l-${index}`} />)}
+      </span>
+      <span className="orbit-ring orbit-ring-a" />
+      <span className="orbit-ring orbit-ring-b" />
+      <span className="orbit-ring orbit-ring-c" />
+      <span className="radar-sweep" />
+      <span className="equator-beam" />
+      <span className="core-aperture" />
+      <span className="satellite-field">
+        {Array.from({ length: 20 }, (_, index) => <i className="satellite-dot" style={{ "--i": index }} key={index} />)}
+      </span>
+    </div>
+    <div className="floating-card floating-card-target"><span>ACTIVE SCAN</span><strong>{target}</strong><small>{result ? "Public surface synchronized" : "Awaiting scan vector"}</small></div>
+    <div className="floating-card floating-card-verdict"><span>VERDICT</span><strong>{Math.round(score)}/100 {riskLevel}</strong><small>{signals} exposure signal{signals === 1 ? "" : "s"} isolated</small></div>
+  </div>;
 }
 
 function MetricCard({ detail, icon: Icon, label, tone, value }) {
@@ -251,9 +290,9 @@ export function ScanView({
   return (
     <div className="view-stack view-enter">
       <form className="panel scan-config-panel" onSubmit={submitAssessment}>
-        <div className="scan-panel-heading">
-          <div><span className="panel-title-icon"><ShieldCheck /></span><span><strong>Choose what you want to assess</strong><small>Safe, low-impact checks for targets you are authorized to review</small></span></div>
-          <span className="safe-scan-badge"><LockKeyhole /> Passive checks only</span>
+        <div className="scan-panel-heading panel-header">
+          <div><span className="panel-title-icon"><Braces /></span><span><small>INPUT-01</small><strong>Threat Acquisition</strong><em>Load an authorized target into the passive analysis engine.</em></span></div>
+          <span className="safe-scan-badge"><LockKeyhole /> Passive protocol</span>
         </div>
         <div className="mode-selector" role="tablist" aria-label="Scan type">
           <button type="button" className={scanMode === "website" ? "selected" : ""} onClick={() => setScanMode("website")}><Globe2 /> Website</button>

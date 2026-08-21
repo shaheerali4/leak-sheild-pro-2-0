@@ -16,7 +16,7 @@ environment=review
 scan_target=https://example.com`;
 const MAX_FOLDER_FILE_BYTES = 300_000;
 const MAX_FOLDER_TOTAL_BYTES = 1_200_000;
-const SECTION_IDS = ["scan", "dashboard", "findings", "assets", "history", "cves", "reports", "integrations", "settings", "help"];
+const SECTION_IDS = ["dashboard", "scan", "history", "findings", "assets", "cves", "reports", "integrations", "settings", "help"];
 
 export default function App() {
   const redirectedAdminEntry = new URLSearchParams(window.location.search).get("_ls_admin_entry") === "1";
@@ -27,8 +27,8 @@ export default function App() {
 
 function Workspace() {
   const [showBoot, setShowBoot] = useState(true);
-  const [theme, setTheme] = useState(() => localStorage.getItem("leakshield.theme") || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
-  const [activeSection, setActiveSection] = useState("scan");
+  const [theme, setTheme] = useState(() => localStorage.getItem("leakshield.theme") || "dark");
+  const [activeSection, setActiveSection] = useState("dashboard");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scanMode, setScanMode] = useState(() => localStorage.getItem("leakshield.defaultMode") || "website");
   const [content, setContent] = useState(DEFAULT_INPUT);
@@ -153,34 +153,37 @@ function Workspace() {
     <EnterpriseShell activeView={activeSection} loading={loading} mobileOpen={mobileOpen}
       onMobileOpenChange={setMobileOpen} onNavigate={navigate} onToggleTheme={toggleTheme}
       result={result} theme={theme}>
-      <WorkspaceSection id="scan" code="Assessment" title="Start a security assessment" summary="Review a public website, configuration, or project folder using safe and non-invasive checks.">
-        <ScanView content={content} error={error} handleFolderUpload={handleFolderUpload} loading={loading}
-          onScan={runScan} projectFiles={projectFiles} scanMode={scanMode} setContent={setContent}
-          setScanMode={setScanMode} setSourceName={setSourceName} setWebsiteUrl={setWebsiteUrl}
-          sourceName={sourceName} websiteUrl={websiteUrl} />
-      </WorkspaceSection>
-      <WorkspaceSection id="dashboard" code="Overview" title="Security posture" summary="A clear summary of verified evidence, coverage, and the next remediation priorities.">
+      <WorkspaceSection id="dashboard" hideHeading>
         <DashboardView history={history} onLoadScan={loadScan} onNavigate={navigate} result={result} />
       </WorkspaceSection>
-      <WorkspaceSection id="findings" code="Findings" title="Verified findings" summary="Related issues are grouped together, with exact evidence and practical fixes shown beside them."><FindingsView result={result} /></WorkspaceSection>
-      <WorkspaceSection id="assets" code="Assets" title="Public attack surface" summary="Review discovered endpoints, technologies, subdomains, certificates, and network signals."><AssetsView result={result} /></WorkspaceSection>
-      <WorkspaceSection id="history" code="History" title="Assessment history" summary="Reopen previous assessments and compare security posture over time.">
-        <HistoryView history={history} loadScan={loadScan} query={historyQuery} riskFilter={historySeverity}
-          setQuery={setHistoryQuery} setRiskFilter={setHistorySeverity} onNavigate={navigate} />
+      <WorkspaceSection id="scan" hideHeading>
+        <div className="ops-grid-shell">
+          <ScanView content={content} error={error} handleFolderUpload={handleFolderUpload} loading={loading}
+            onScan={runScan} projectFiles={projectFiles} scanMode={scanMode} setContent={setContent}
+            setScanMode={setScanMode} setSourceName={setSourceName} setWebsiteUrl={setWebsiteUrl}
+            sourceName={sourceName} websiteUrl={websiteUrl} />
+          <div className="embedded-history" id="history">
+            <header className="embedded-panel-title"><span>HIST-07</span><h2>Mission Archive</h2><p>Reopen a previous security sweep.</p></header>
+            <HistoryView history={history} loadScan={loadScan} query={historyQuery} riskFilter={historySeverity}
+              setQuery={setHistoryQuery} setRiskFilter={setHistorySeverity} onNavigate={navigate} />
+          </div>
+        </div>
       </WorkspaceSection>
-      <WorkspaceSection id="cves" code="Intelligence" title="CVE intelligence" summary="Official NVD correlations are shown only when an exact software version is observable."><CveView result={result} /></WorkspaceSection>
-      <WorkspaceSection id="reports" code="Reports" title="Export reports" summary="Create executive and technical reports without exposing secret values."><ReportsView result={result} /></WorkspaceSection>
-      <WorkspaceSection id="integrations" code="Sources" title="Free data sources" summary="Transparent public and open-source intelligence powering every assessment."><IntegrationsView result={result} /></WorkspaceSection>
-      <WorkspaceSection id="settings" code="Preferences" title="Workspace settings" summary="Choose your appearance and local assessment defaults."><SettingsView theme={theme} onToggleTheme={toggleTheme} /></WorkspaceSection>
-      <WorkspaceSection id="help" code="Knowledge" title="Security knowledge base" summary="Beginner-friendly guidance grounded in official security references."><HelpView /></WorkspaceSection>
+      <WorkspaceSection id="findings" code="INTEL-22" title="Exposure Findings" summary="Grouped security signals with exact evidence and mission-ready remediation."><FindingsView result={result} /></WorkspaceSection>
+      <WorkspaceSection id="assets" code="SURFACE-09" title="Attack Surface" summary="Discovered endpoints, technologies, subdomains, certificates, and network signals."><AssetsView result={result} /></WorkspaceSection>
+      <WorkspaceSection id="cves" code="CVE-11" title="CVE Intelligence" summary="Official NVD correlations shown only when an exact software version is observable."><CveView result={result} /></WorkspaceSection>
+      <WorkspaceSection id="reports" code="REPORT-14" title="Report Vault" summary="Export executive and technical evidence without exposing secret values."><ReportsView result={result} /></WorkspaceSection>
+      <WorkspaceSection id="integrations" code="UPLINK-04" title="Data Uplinks" summary="Transparent public and open-source intelligence powering every assessment."><IntegrationsView result={result} /></WorkspaceSection>
+      <WorkspaceSection id="settings" code="CONFIG-02" title="Console Settings" summary="Tune the display and local assessment defaults."><SettingsView theme={theme} onToggleTheme={toggleTheme} /></WorkspaceSection>
+      <WorkspaceSection id="help" code="KNOW-27" title="Field Intelligence" summary="Beginner-friendly guidance grounded in official security references."><HelpView /></WorkspaceSection>
     </EnterpriseShell>
     </>
   );
 }
 
-function WorkspaceSection({ children, code, id, summary, title }) {
+function WorkspaceSection({ children, code, hideHeading = false, id, summary, title }) {
   return <section className="workspace-section" id={id}>
-    <header className="section-heading"><p>{code}</p><h2>{title}</h2><small>{summary}</small></header>
+    {!hideHeading && <header className="section-heading"><p>{code}</p><h2>{title}</h2><small>{summary}</small></header>}
     {children}
   </section>;
 }

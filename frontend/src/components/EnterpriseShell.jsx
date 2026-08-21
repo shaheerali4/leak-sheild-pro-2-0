@@ -1,23 +1,24 @@
 import { useEffect } from "react";
 import {
-  BookOpen, Boxes, ChevronDown, DatabaseZap, FileClock, FileSearch, Gauge,
-  History, Menu, Moon, PlugZap, ScanLine, Settings, ShieldCheck, Sun, X
+  Activity, BookOpen, Boxes, ChevronDown, DatabaseZap, FileClock, FileSearch,
+  Fingerprint, Gauge, History, Menu, Moon, PlugZap, ScanLine, Settings,
+  ShieldAlert, ShieldCheck, Sun, X
 } from "lucide-react";
 
 const primaryNavigation = [
-  { id: "scan", label: "Assessment", icon: ScanLine },
-  { id: "dashboard", label: "Overview", icon: Gauge },
+  { id: "dashboard", label: "Console", icon: Gauge },
+  { id: "scan", label: "Scan", icon: ScanLine },
   { id: "findings", label: "Findings", icon: FileSearch },
-  { id: "assets", label: "Assets", icon: Boxes },
-  { id: "history", label: "History", icon: History },
+  { id: "assets", label: "Surface", icon: Boxes },
   { id: "reports", label: "Reports", icon: FileClock },
-  { id: "help", label: "Knowledge", icon: BookOpen }
+  { id: "help", label: "Intel", icon: BookOpen }
 ];
 
 const secondaryNavigation = [
+  { id: "history", label: "Mission archive", icon: History },
   { id: "cves", label: "CVE intelligence", icon: DatabaseZap },
-  { id: "integrations", label: "Data sources", icon: PlugZap },
-  { id: "settings", label: "Settings", icon: Settings }
+  { id: "integrations", label: "Data uplinks", icon: PlugZap },
+  { id: "settings", label: "Console settings", icon: Settings }
 ];
 
 export default function EnterpriseShell({
@@ -47,11 +48,14 @@ export default function EnterpriseShell({
 
   const allNavigation = [...primaryNavigation, ...secondaryNavigation];
 
-  return <div className="app-frame">
-    <a className="skip-link" href="#scan">Skip to assessment</a>
-    <header className="topbar">
-      <BrandMark onNavigate={() => navigate("scan")} />
-      <nav className="top-navigation" aria-label="Primary navigation">
+  return <div className="app-frame orbital-console">
+    <div className="orbital-grid" aria-hidden="true" />
+    <div className="global-scanline" aria-hidden="true" />
+    <a className="skip-link" href="#dashboard">Skip to security console</a>
+
+    <header className="topbar mission-topbar">
+      <BrandMark onNavigate={() => navigate("dashboard")} />
+      <nav className="top-navigation" aria-label="Console modules">
         {primaryNavigation.map(({ id, label }) => (
           <button className={activeView === id ? "active" : ""} key={id} onClick={() => navigate(id)}>{label}</button>
         ))}
@@ -65,8 +69,9 @@ export default function EnterpriseShell({
         </details>
       </nav>
       <div className="topbar-actions">
-        <span className={`system-status ${loading ? "status-running" : ""}`}><span />{loading ? "Scanning" : "Engine ready"}</span>
-        <button className="theme-button" onClick={onToggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`} title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
+        <span className="telemetry-pill telemetry-engine"><Activity /><span>Engine</span><strong>{loading ? "ACTIVE" : "ARMED"}</strong></span>
+        <span className="telemetry-pill telemetry-risk"><ShieldAlert /><span>Risk</span><strong>{result?.overall_level || "STANDBY"}</strong></span>
+        <button className="theme-button" onClick={onToggleTheme} aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}>
           {theme === "dark" ? <Sun /> : <Moon />}
         </button>
         <button className="mobile-nav-toggle" onClick={() => onMobileOpenChange(true)} aria-label="Open navigation"><Menu /></button>
@@ -76,13 +81,13 @@ export default function EnterpriseShell({
     {mobileOpen && <div className="mobile-navigation-layer">
       <button className="mobile-navigation-scrim" aria-label="Close navigation" onClick={() => onMobileOpenChange(false)} />
       <aside className="mobile-navigation" aria-label="Mobile navigation">
-        <header><BrandMark onNavigate={() => navigate("scan")} /><button className="icon-button" onClick={() => onMobileOpenChange(false)} aria-label="Close navigation"><X /></button></header>
+        <header><BrandMark onNavigate={() => navigate("dashboard")} /><button className="icon-button" onClick={() => onMobileOpenChange(false)} aria-label="Close navigation"><X /></button></header>
         <nav>
           {allNavigation.map(({ icon: Icon, id, label }) => (
             <button className={activeView === id ? "active" : ""} key={id} onClick={() => navigate(id)}><Icon /><span>{label}</span></button>
           ))}
         </nav>
-        <div className="mobile-nav-status"><ShieldCheck /><span><strong>Passive assessment engine</strong><small>Free, public intelligence only</small></span></div>
+        <div className="mobile-nav-status"><ShieldCheck /><span><strong>Passive defense protocol</strong><small>No exploit payloads or paid intelligence</small></span></div>
       </aside>
     </div>}
 
@@ -90,9 +95,9 @@ export default function EnterpriseShell({
       <main className="workspace-main" id="main-content">
         {children}
         <footer className="site-footer">
-          <BrandMark onNavigate={() => navigate("scan")} />
+          <BrandMark onNavigate={() => navigate("dashboard")} />
           <p>Enterprise-quality cybersecurity for everyone, completely free.</p>
-          <span>{result?.source_name ? `Active assessment: ${result.source_name}` : "Ready for your first assessment"}</span>
+          <span>{result?.source_name ? `TARGET // ${result.source_name}` : "SYSTEM // AWAITING TARGET"}</span>
         </footer>
       </main>
     </div>
@@ -100,8 +105,8 @@ export default function EnterpriseShell({
 }
 
 export function BrandMark({ onNavigate }) {
-  return <button className="brand" onClick={onNavigate} aria-label="LeakShield Pro assessment">
-    <span className="brand-shield"><ShieldCheck /></span>
-    <span><strong>LeakShield Pro</strong><small>Open security platform</small></span>
+  return <button className="brand" onClick={onNavigate} aria-label="LeakShield Pro security console">
+    <span className="brand-shield"><Fingerprint /></span>
+    <span><small>LEAKSHIELD PRO // PUBLIC EXPOSURE AI</small><strong>Orbital Security Console</strong></span>
   </button>;
 }
