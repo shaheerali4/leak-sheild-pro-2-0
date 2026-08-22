@@ -6,8 +6,7 @@
     },
     "backend": {
       "root": "backend/",
-      "entrypoint": "app.main:app",
-      "maxDuration": 300
+      "entrypoint": "app.main:app"
     }
   },
   "headers": [
