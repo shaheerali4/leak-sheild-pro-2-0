@@ -115,6 +115,15 @@ def _authenticated_admin(authorization: Annotated[str | None, Header()] = None) 
         raise HTTPException(status_code=401, detail="Admin authentication required") from None
 
 
+def is_authenticated_admin(authorization: str | None) -> bool:
+    """Allow other protected workflows to recognize a valid admin session."""
+    try:
+        _authenticated_admin(authorization)
+    except HTTPException:
+        return False
+    return True
+
+
 def _iso(value: datetime | None) -> str:
     return (value or datetime.now(timezone.utc)).isoformat()
 

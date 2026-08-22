@@ -32,6 +32,7 @@ export function clientSessionId() {
 
 async function request(path, options = {}) {
   const { headers: optionHeaders = {}, ...requestOptions } = options;
+  const storedAdminToken = adminToken();
   const response = await fetch(`${API_BASE}${path}`, {
     cache: "no-store",
     credentials: "same-origin",
@@ -40,6 +41,7 @@ async function request(path, options = {}) {
     headers: {
       "Content-Type": "application/json",
       "X-LeakShield-Session": clientSessionId(),
+      ...(storedAdminToken ? { Authorization: `Bearer ${storedAdminToken}` } : {}),
       ...optionHeaders
     }
   });

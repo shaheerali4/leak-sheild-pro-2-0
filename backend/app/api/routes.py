@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.admin import router as admin_router
+from app.api.admin import is_authenticated_admin
 from app.database import get_session
 from app.models import Finding, Scan
 from app.schemas import ScanHistoryItem, ScanRequest, ScanResponse
@@ -24,7 +25,8 @@ async def create_scan(
 ) -> ScanResponse:
     enforce_scan_rate_limit(request)
     owner_id = scan_owner_id(request)
-    return await ScanService(session, owner_id).scan(payload)
+    admin_authorized = is_authenticated_admin(request.headers.get("authorization"))
+    return await ScanService(session, owner_id, admin_authorized=admin_authorized).scan(payload)
 
 
 @router.get("/scans", response_model=list[ScanHistoryItem])

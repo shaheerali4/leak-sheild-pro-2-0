@@ -21,9 +21,10 @@ from app.schemas import Explanation, FindingResponse, ScanRequest, ScanResponse
 
 
 class ScanService:
-    def __init__(self, session: AsyncSession, owner_id: str) -> None:
+    def __init__(self, session: AsyncSession, owner_id: str, admin_authorized: bool = False) -> None:
         self.session = session
         self.owner_id = owner_id
+        self.admin_authorized = admin_authorized
         self.settings = get_settings()
         self.detector = DetectionEngine()
         self.risk_engine = RiskEngine()
@@ -33,7 +34,8 @@ class ScanService:
     async def scan(self, payload: ScanRequest) -> ScanResponse:
         if payload.mode == "website":
             try:
-                async with asyncio.timeout(45):
+                timeout_seconds = 120 if self.admin_authorized else 45
+                async with asyncio.timeout(timeout_seconds):
                     assessment = await self.website_engine.assess(payload.website_url or payload.url or "")
             except TimeoutError:
                 raise HTTPException(status_code=504, detail="Website assessment exceeded the safe time limit") from None
