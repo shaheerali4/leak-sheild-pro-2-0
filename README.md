@@ -9,6 +9,7 @@ LeakShield Pro is a free and open-source cybersecurity assessment platform for p
 
 ### Downloadable Exhibition Documents
 
+- [A4 exhibition table one-pager (PDF)](output/pdf/LeakShield-Pro-A4-Exhibition-One-Pager.pdf)
 - [Professional complete jury documentation (PDF)](output/pdf/LeakShield-Pro-Complete-Jury-Documentation.pdf)
 - [One-minute Urdu-English video script (PDF)](output/pdf/LeakShield-Pro-One-Minute-Video-Script.pdf)
 
